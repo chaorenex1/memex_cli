@@ -8,6 +8,7 @@ control_writer_error_capacity = 1
 tick_interval_ms = 1000
 
 [policy]
+provider = "config"
 mode = "auto"
 default_action = "deny"
 
@@ -22,6 +23,7 @@ allowlist = [
 ]
 
 [memory]
+provider = "service"
 enabled = true
 base_url = "https://memory.internal"
 api_key = ""
@@ -36,6 +38,7 @@ max_answer_chars = 900
 include_meta_line = true
 
 [gatekeeper]
+provider = "standard"
 max_inject = 3
 min_trust_show = 0.40
 min_level_inject = 2

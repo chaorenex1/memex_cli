@@ -51,7 +51,12 @@ pub fn extract_candidates(
     }
     answer.push('\n');
 
-    let tool_steps = extract_tool_steps_from_lite(tool_events, cfg.tool_steps_max);
+    let tool_steps = extract_tool_steps_from_lite(
+        tool_events,
+        cfg.tool_steps_max,
+        cfg.tool_step_args_keys_max,
+        cfg.tool_step_value_max_chars,
+    );
 
     answer.push_str("## Steps\n");
     if !tool_steps.is_empty() {
@@ -113,7 +118,12 @@ pub fn extract_candidates(
     vec![draft]
 }
 
-fn extract_tool_steps_from_lite(events: &[ToolEventLite], max: usize) -> Vec<ToolStep> {
+fn extract_tool_steps_from_lite(
+    events: &[ToolEventLite],
+    max: usize,
+    args_keys_max: usize,
+    value_max_chars: usize,
+) -> Vec<ToolStep> {
     let real_events: Vec<ToolEvent> = events
         .iter()
         .map(|lite| ToolEvent {
@@ -126,7 +136,7 @@ fn extract_tool_steps_from_lite(events: &[ToolEventLite], max: usize) -> Vec<Too
         })
         .collect();
 
-    extract_tool_steps(&real_events, max)
+    extract_tool_steps(&real_events, max, args_keys_max, value_max_chars)
 }
 
 fn extract_command_block(text: &str, context_lines: usize) -> Option<String> {
