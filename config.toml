@@ -1,93 +1,28 @@
-[memex_cli]
-project_id = "Memex"          # optional; empty means auto
-run_id = ""                 # optional; empty means auto
-memory_on = true
-stream = true
-inject_mode = "system"      # system|user|both|none
-gatekeeper_mode = "soft"         # off|soft|hard
-audit = "prompt"            # off|prompt|auto
-redact = "basic"            # off|basic|strict
-log_format = "text"         # text|json
-log_level = "info"          # error|warn|info|debug|trace
+project_id = "my-project"
 
+[control]
+fail_mode = "closed"
+decision_timeout_ms = 300000
+abort_grace_ms = 5000
 
-[memex_cli.memory]
-base_url = "https://memory.example.com"
-api_key = ""          # optional; prefer env
-timeout_ms = 10000
-connect_timeout_ms = 3000
-retry = 1
-retry_backoff_ms = 200
-
-
-[memex_cli.search]
-limit = 6
-min_score = 0.2
-query_max_chars = 1200
-include_session_file = true
-include_recent_stdout = false
-
-
-[memex_cli.inject]
-max_items = 6
-max_chars = 6000
-template = "default"    # default|custom
-custom_template_path = ""  # when template=custom
-
-[memex_cli.hit]
-enabled = true
-mode = "shown"   # off|shown|used|both
-default_shown = true
-default_used = false
-
-
-[memex_cli.candidate]
-enabled = true
-mode = "auto"           # off|auto|force
-default_confidence = 0.5
-tags = ["memex_cli"]
-max_answer_chars = 20000
-
-[memex_cli.gatekeeper]
-min_top1_score_to_skip = 0.6
-require_steps = true
-require_no_secrets = true
-strong_signal_only = true    # soft/hard 模式里进一步控制
-
-
-[memex_cli.validate]
-enabled = true
-mode = "auto"        # off|auto
-source = "memex_cli"
-client = "memex_cli"
-default_signal_strength = 0.6
-
-[memex_cli.policy]
-mode = "prompt"  # off|prompt|auto
-default_action = "ask"  # allow|deny|ask
-
-allowlist = [
-  { tool = "fs.read", action = "read" },
-  { tool = "git.status", action = "exec" }
-]
+[policy]
+mode = "auto"
+default_action = "deny"
 
 denylist = [
-  { tool = "net.http", action = "net" },
-  { tool = "shell.exec", action = "exec" }
+  { tool = "shell.exec", action = "exec", reason = "shell is denied by default" },
+  { tool = "net.http", action = "net", reason = "network is denied by default" },
 ]
 
-
-[memex_cli.redaction]
-level = "basic"       # off|basic|strict
-mask = "****"
-patterns = [
-  # 可选自定义正则（实现上注意 ReDoS 防护）
+allowlist = [
+  { tool = "fs.read", action = "read", reason = "read is allowed" },
+  { tool = "git.*", reason = "git commands allowed" }
 ]
 
-
-
-
-
-
-
-
+[memory]
+enabled = true
+base_url = "https://memory.internal"
+api_key = ""
+timeout_ms = 10000
+search_limit = 6
+min_score = 0.2
