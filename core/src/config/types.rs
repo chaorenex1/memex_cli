@@ -6,6 +6,9 @@ pub struct AppConfig {
     pub project_id: String,
 
     #[serde(default)]
+    pub logging: LoggingConfig,
+
+    #[serde(default)]
     pub control: ControlConfig,
 
     #[serde(default)]
@@ -38,6 +41,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             project_id: default_project_id(),
+            logging: LoggingConfig::default(),
             control: ControlConfig::default(),
             policy: PolicyConfig::default(),
             memory: MemoryConfig::default(),
@@ -46,6 +50,56 @@ impl Default for AppConfig {
             runner: RunnerConfig::default(),
             events_out: EventsOutConfig::default(),
             gatekeeper: GatekeeperConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    #[serde(default = "default_logging_enabled")]
+    pub enabled: bool,
+
+    /// If true, log to stderr.
+    #[serde(default = "default_logging_console")]
+    pub console: bool,
+
+    /// If true, log to a file under `directory` (or OS temp dir if unset).
+    #[serde(default = "default_logging_file")]
+    pub file: bool,
+
+    /// EnvFilter string, e.g. "info" or "memex_core=debug".
+    #[serde(default = "default_logging_level")]
+    pub level: String,
+
+    /// Optional directory for log files. If empty or unset, uses OS temp dir.
+    #[serde(default)]
+    pub directory: Option<String>,
+}
+
+fn default_logging_enabled() -> bool {
+    true
+}
+
+fn default_logging_console() -> bool {
+    true
+}
+
+fn default_logging_file() -> bool {
+    true
+}
+
+fn default_logging_level() -> String {
+    "info".to_string()
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_logging_enabled(),
+            console: default_logging_console(),
+            file: default_logging_file(),
+            level: default_logging_level(),
+            directory: None,
         }
     }
 }

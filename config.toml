@@ -7,6 +7,15 @@ control_channel_capacity = 128
 control_writer_error_capacity = 1
 tick_interval_ms = 1000
 
+[logging]
+# EnvFilter 格式："info" / "debug" / "memex_core=debug,memex_cli=debug" 等。
+level = "info"
+# 是否输出到 stderr
+console = true
+# 是否输出到文件（默认写入系统临时目录）
+file = true
+# directory = ""  # 为空/未设置时使用系统临时目录
+
 [policy]
 provider = "config"
 mode = "auto"

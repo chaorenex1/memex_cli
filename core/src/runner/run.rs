@@ -24,6 +24,15 @@ pub async fn run_session(
     run_id: &str,
     silent: bool,
 ) -> Result<RunnerResult, RunnerError> {
+    let _span = tracing::info_span!(
+        "core.run_session",
+        run_id = %run_id,
+        capture_bytes = capture_bytes,
+        silent = silent,
+        fail_mode = %control.fail_mode,
+    );
+    let _enter = _span.enter();
+
     let stdout = session
         .stdout()
         .ok_or_else(|| RunnerError::Spawn("no stdout".into()))?;

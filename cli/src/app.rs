@@ -1,7 +1,7 @@
 use chrono::Utc;
 
 use crate::commands::cli::{Args, RunArgs, BackendKind};
-use memex_core::config::{load_default, MemoryProvider};
+use memex_core::config::MemoryProvider;
 use memex_core::memory::InjectPlacement;
 use memex_core::gatekeeper::config::GatekeeperConfig as LogicGatekeeperConfig;
 use memex_core::error::RunnerError;
@@ -18,10 +18,14 @@ use memex_core::tool_event::{ToolEventLite, WrapperEvent};
 
 use memex_plugins::factory;
 
-pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Option<String>) -> Result<i32, RunnerError> {
+#[tracing::instrument(name = "cli.run_app", skip(args, run_args, cfg))]
+pub async fn run_app_with_config(
+    args: Args,
+    run_args: Option<RunArgs>,
+    recover_run_id: Option<String>,
+    mut cfg: memex_core::config::AppConfig,
+) -> Result<i32, RunnerError> {
     let args = args;
-
-    let mut cfg = load_default().map_err(|e| RunnerError::Config(e.to_string()))?;
 
     let mut prompt_text: Option<String> = None;
 
@@ -74,6 +78,7 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
     let gatekeeper = factory::build_gatekeeper(&cfg);
 
     let run_id = recover_run_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    tracing::debug!(run_id = %run_id, stream_format = %stream_format, "run initialized");
 
     let gk_logic_cfg: LogicGatekeeperConfig = cfg.gatekeeper_logic_config();
 
