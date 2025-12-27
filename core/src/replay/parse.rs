@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::tool_event::parse_tool_event_line;
 use crate::tool_event::ToolEvent;
 use crate::tool_event::WrapperEvent;
+use crate::tool_event::{MultiToolEventLineParser, TOOL_EVENT_PREFIX};
 
 use super::model::ReplayRun;
 
@@ -12,13 +12,15 @@ pub fn parse_events_file(path: &str, run_id: Option<&str>) -> Result<Vec<ReplayR
     let mut run_order: Vec<String> = Vec::new();
     let mut current_run_id: Option<String> = None;
 
+    let mut parser = MultiToolEventLineParser::new(TOOL_EVENT_PREFIX);
+
     for line in raw.lines() {
         let s = line.trim();
         if s.is_empty() {
             continue;
         }
 
-        if let Some(ev) = parse_tool_event_line(s) {
+        if let Some(ev) = parser.parse_line(s) {
             if let Some(id) = current_run_id.clone() {
                 if run_id.map(|r| r == id).unwrap_or(true) {
                     attach_tool_event(&mut runs, &mut run_order, id, ev);

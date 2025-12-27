@@ -28,6 +28,101 @@ impl StreamJsonToolEventParser {
 
         let v: Value = serde_json::from_str(s).ok()?;
 
+        // Claude stream-json
+        // Shape examples (simplified):
+        // - {"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"TodoWrite","input":{...}}]}}
+        // - {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"...","content":"..."}]}}
+        if v.get("type").and_then(|x| x.as_str()) == Some("assistant") {
+            if let Some(items) = v
+                .get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_array())
+            {
+                for item in items {
+                    if item.get("type").and_then(|x| x.as_str()) != Some("tool_use") {
+                        continue;
+                    }
+
+                    let id = item
+                        .get("id")
+                        .and_then(|x| x.as_str())
+                        .map(|x| x.to_string());
+                    let tool = item
+                        .get("name")
+                        .and_then(|x| x.as_str())
+                        .map(|x| x.to_string());
+                    let args = item.get("input").cloned().unwrap_or(Value::Null);
+
+                    return Some(ToolEvent {
+                        v: 1,
+                        event_type: "tool.request".to_string(),
+                        ts: None,
+                        run_id: None,
+                        id,
+                        tool,
+                        action: None,
+                        args,
+                        ok: None,
+                        output: None,
+                        error: None,
+                        rationale: None,
+                    });
+                }
+            }
+        }
+
+        if v.get("type").and_then(|x| x.as_str()) == Some("user") {
+            if let Some(items) = v
+                .get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_array())
+            {
+                for item in items {
+                    if item.get("type").and_then(|x| x.as_str()) != Some("tool_result") {
+                        continue;
+                    }
+
+                    let id = item
+                        .get("tool_use_id")
+                        .and_then(|x| x.as_str())
+                        .map(|x| x.to_string());
+
+                    // Claude doesn't always expose an explicit ok/error flag here.
+                    // Best-effort: treat presence of tool_use_result.isError as authoritative,
+                    // otherwise fall back to "has content".
+                    let ok = v
+                        .get("tool_use_result")
+                        .and_then(|r| r.get("isError").or_else(|| r.get("is_error")))
+                        .and_then(|x| x.as_bool())
+                        .map(|is_error| !is_error)
+                        .or_else(|| {
+                            if item.get("content").is_some() {
+                                Some(true)
+                            } else {
+                                None
+                            }
+                        });
+
+                    let output = item.get("content").cloned().or_else(|| v.get("tool_use_result").cloned());
+
+                    return Some(ToolEvent {
+                        v: 1,
+                        event_type: "tool.result".to_string(),
+                        ts: None,
+                        run_id: None,
+                        id,
+                        tool: None,
+                        action: None,
+                        args: Value::Null,
+                        ok,
+                        output,
+                        error: None,
+                        rationale: None,
+                    });
+                }
+            }
+        }
+
         // Gemini stream-json
         if v.get("type").and_then(|x| x.as_str()) == Some("tool_use") {
             let tool = v.get("tool_name").and_then(|x| x.as_str()).map(|x| x.to_string());
@@ -211,5 +306,29 @@ mod tests {
         let mut p = StreamJsonToolEventParser::new();
         assert!(p.parse_line("event: message_start").is_none());
         assert!(p.parse_line("Could not parse message into JSON:").is_none());
+    }
+
+    #[test]
+    fn parses_claude_tool_use_envelope() {
+        let mut p = StreamJsonToolEventParser::new();
+
+        let line = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"call_00_abc","name":"TodoWrite","input":{"todos":[{"content":"x"}]}}]}}"#;
+        let ev = p.parse_line(line).expect("claude tool_use should parse");
+        assert_eq!(ev.event_type, "tool.request");
+        assert_eq!(ev.id.as_deref(), Some("call_00_abc"));
+        assert_eq!(ev.tool.as_deref(), Some("TodoWrite"));
+        assert!(ev.args.get("todos").is_some());
+    }
+
+    #[test]
+    fn parses_claude_tool_result_envelope() {
+        let mut p = StreamJsonToolEventParser::new();
+
+        let line = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"call_00_abc","content":"ok"}]}}"#;
+        let ev = p.parse_line(line).expect("claude tool_result should parse");
+        assert_eq!(ev.event_type, "tool.result");
+        assert_eq!(ev.id.as_deref(), Some("call_00_abc"));
+        assert_eq!(ev.ok, Some(true));
+        assert!(ev.output.is_some());
     }
 }

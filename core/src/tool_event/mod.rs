@@ -13,7 +13,7 @@ pub mod wrapper_event;
 pub use linker::{extract_tool_steps, ToolStep};
 pub use metrics::{build_tool_insights, ToolInsights};
 pub use model::{ToolEvent, TOOL_EVENT_PREFIX};
-pub use multi_parser::{format_tool_event_line, parse_tool_event_line};
+pub use multi_parser::{format_tool_event_line, parse_tool_event_line, MultiToolEventLineParser};
 pub use correlate::{correlate_request_result, CorrelationStats, ToolCorrStats};
 pub use lite::ToolEventLite;
 pub use parser::{CompositeToolEventParser, PrefixedJsonlParser, ToolEventParser};
