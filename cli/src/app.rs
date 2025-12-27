@@ -102,6 +102,8 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
         min_answer_chars: cfg.candidate_extract.min_answer_chars,
         context_lines: cfg.candidate_extract.context_lines,
         tool_steps_max: cfg.candidate_extract.tool_steps_max,
+        tool_step_args_keys_max: cfg.candidate_extract.tool_step_args_keys_max,
+        tool_step_value_max_chars: cfg.candidate_extract.tool_step_value_max_chars,
         redact: cfg.candidate_extract.redact,
         strict_secret_block: cfg.candidate_extract.strict_secret_block,
         confidence: cfg.candidate_extract.confidence,

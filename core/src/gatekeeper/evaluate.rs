@@ -186,8 +186,16 @@ impl Gatekeeper {
                 payload: serde_json::json!({
                     "exit_code": run.exit_code,
                     "duration_ms": run.duration_ms,
-                    "stdout_tail_digest": digest_cheap(&run.stdout_tail),
-                    "stderr_tail_digest": digest_cheap(&run.stderr_tail),
+                    "stdout_tail_digest": digest_cheap(
+                        &run.stdout_tail,
+                        cfg.digest_head_chars,
+                        cfg.digest_tail_chars,
+                    ),
+                    "stderr_tail_digest": digest_cheap(
+                        &run.stderr_tail,
+                        cfg.digest_head_chars,
+                        cfg.digest_tail_chars,
+                    ),
                     "tool_events_total": insights.total,
                     "tool_events_by_type": insights.by_type,
                     "tools": insights.tools,
@@ -282,17 +290,18 @@ fn extract_i32(meta: &Value, key: &str) -> Option<i32> {
     })
 }
 
-fn digest_cheap(s: &str) -> Value {
+fn digest_cheap(s: &str, head_chars: usize, tail_chars: usize) -> Value {
     let len = s.len();
-    let head = s.chars().take(80).collect::<String>();
+    let head = s.chars().take(head_chars).collect::<String>();
     let tail = s
         .chars()
         .rev()
-        .take(80)
+        .take(tail_chars)
         .collect::<String>()
         .chars()
         .rev()
         .collect::<String>();
+
     serde_json::json!({ "len": len, "head": head, "tail": tail })
 }
 
