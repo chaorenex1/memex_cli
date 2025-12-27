@@ -1,11 +1,11 @@
 use chrono::Utc;
 
-use crate::commands::cli::{Args, RunArgs};
+use crate::commands::cli::{Args, RunArgs, BackendKind};
 use memex_core::config::{load_default, MemoryProvider};
 use memex_core::memory::InjectPlacement;
 use memex_core::gatekeeper::config::GatekeeperConfig as LogicGatekeeperConfig;
 use memex_core::error::RunnerError;
-use memex_core::events_out::{start_events_out, EventsOutTx, write_wrapper_event};
+use memex_core::events_out::{start_events_out, write_wrapper_event};
 use memex_core::gatekeeper::{Gatekeeper, SearchMatch, GatekeeperDecision};
 use memex_core::memory::{
     build_candidate_payloads, build_hit_payload, build_validate_payloads, extract_candidates,
@@ -19,35 +19,26 @@ use memex_core::tool_event::{ToolEventLite, WrapperEvent};
 use memex_plugins::factory;
 
 pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Option<String>) -> Result<i32, RunnerError> {
-    let mut args = args;
+    let args = args;
 
     let mut cfg = load_default().map_err(|e| RunnerError::Spawn(e.to_string()))?;
 
+    let mut prompt_text: Option<String> = None;
+
     if let Some(ra) = &run_args {
-        args.codecli_bin = ra.backend.clone();
-        args.codecli_args = Vec::new();
-        
-        if let Some(model) = &ra.model {
-            args.codecli_args.push("--model".to_string());
-            args.codecli_args.push(model.clone());
-        }
-
-        if ra.stream {
-            args.codecli_args.push("--stream".to_string());
-        }
-
         if let Some(prompt) = &ra.prompt {
-            args.codecli_args.push(prompt.clone());
+            prompt_text = Some(prompt.clone());
         } else if let Some(path) = &ra.prompt_file {
             let content = std::fs::read_to_string(path)
                 .map_err(|e| RunnerError::Spawn(format!("failed to read prompt file: {}", e)))?;
-            args.codecli_args.push(content);
+            prompt_text = Some(content);
         } else if ra.stdin {
             use std::io::Read;
             let mut content = String::new();
-            std::io::stdin().read_to_string(&mut content)
+            std::io::stdin()
+                .read_to_string(&mut content)
                 .map_err(|e| RunnerError::Spawn(format!("failed to read prompt from stdin: {}", e)))?;
-            args.codecli_args.push(content);
+            prompt_text = Some(content);
         }
 
         if let Some(pid) = &ra.project_id {
@@ -64,25 +55,25 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
         }
     }
 
-    let stream_format = run_args.as_ref().map(|ra| ra.stream_format.as_str()).unwrap_or("text");
+    let stream_format = run_args
+        .as_ref()
+        .map(|ra| ra.stream_format.as_str())
+        .unwrap_or("text");
 
-    if stream_format == "jsonl" {
-        cfg.events_out.enabled = true;
-        cfg.events_out.path = "stdout:".to_string();
-    }
+    let stream = factory::build_stream(stream_format);
+    let stream_plan = stream.apply(&mut cfg);
 
-    let user_query = args.codecli_args.join(" ");
+    let user_query = prompt_text.clone().unwrap_or_else(|| args.codecli_args.join(" "));
 
     let events_out_tx = start_events_out(&cfg.events_out)
         .await
         .map_err(RunnerError::Spawn)?;
 
     let memory = factory::build_memory(&cfg).map_err(|e| RunnerError::Spawn(e.to_string()))?;
-    let runner = factory::build_runner(&cfg);
     let policy = factory::build_policy(&cfg);
     let gatekeeper = factory::build_gatekeeper(&cfg);
 
-    let run_id = recover_run_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let run_id = recover_run_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
     let gk_logic_cfg: LogicGatekeeperConfig = cfg.gatekeeper_logic_config();
 
@@ -113,7 +104,7 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
         MemoryProvider::Service(svc_cfg) => (svc_cfg.search_limit, svc_cfg.min_score),
     };
 
-    let (_merged_query, shown_qa_ids, matches) = build_merged_prompt(
+    let (_merged_query, shown_qa_ids, matches, memory_search_event) = build_merged_prompt(
         memory.as_deref(),
         &cfg.project_id,
         &user_query,
@@ -121,34 +112,98 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
         memory_min_score,
         &gk_logic_cfg,
         &inject_cfg,
-        events_out_tx.as_ref(),
-        &run_id,
     )
     .await;
 
+    // Buffer early wrapper events until we learn the effective run_id (session_id).
+    // This keeps IDs consistent across the whole wrapper-event stream.
+    let mut pending_wrapper_events: Vec<WrapperEvent> = Vec::new();
+    if let Some(ev) = memory_search_event {
+        pending_wrapper_events.push(ev);
+    }
+
     let mut start_event = WrapperEvent::new("run.start", Utc::now().to_rfc3339());
-    start_event.run_id = Some(run_id.clone());
+
+    // Build backend plan (runner + session args)
+    let mut base_envs: std::collections::HashMap<String, String> = std::env::vars().collect();
+
+    let (runner, session_args) = if let Some(ra) = &run_args {
+        let backend_spec = ra.backend.as_str();
+        let kind = match ra.backend_kind {
+            BackendKind::Auto => "auto",
+            BackendKind::Codecli => "codecli",
+            BackendKind::Aiservice => "aiservice",
+        };
+        let backend = factory::build_backend_with_kind(kind, backend_spec);
+        // Merge extra envs from CLI flags (KEY=VALUE), overriding process env.
+        for kv in ra.env.iter() {
+            if let Some((k, v)) = kv.split_once('=') {
+                if !k.trim().is_empty() {
+                    base_envs.insert(k.trim().to_string(), v.to_string());
+                }
+            }
+        }
+
+        let backend_plan = backend
+            .plan(
+                backend_spec,
+                base_envs,
+                recover_run_id.clone(),
+                user_query.clone(),
+                ra.model.clone(),
+                ra.stream,
+                stream_format,
+            )
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+
+        (backend_plan.runner, backend_plan.session_args)
+    } else {
+        // Legacy mode (no subcommand): passthrough cmd/args exactly as provided.
+        let runner = factory::build_runner(&cfg);
+        let session_args = RunnerStartArgs {
+            cmd: args.codecli_bin.clone(),
+            args: args.codecli_args.clone(),
+            envs: base_envs,
+        };
+        (runner, session_args)
+    };
+
+    // Emit start event with the actual backend invocation
     start_event.data = Some(serde_json::json!({
-        "cmd": args.codecli_bin.clone(),
-        "args": args.codecli_args.clone(),
+        "cmd": session_args.cmd.clone(),
+        "args": session_args.args.clone(),
     }));
-    write_wrapper_event(events_out_tx.as_ref(), &start_event).await;
+    pending_wrapper_events.push(start_event);
 
     // Start Session
-    let session_args = RunnerStartArgs {
-        cmd: args.codecli_bin.clone(),
-        args: args.codecli_args.clone(),
-        envs: std::env::vars().collect(),
-    };
-    
-    let session = runner.start_session(&session_args).await.map_err(|e| RunnerError::Spawn(e.to_string()))?;
+    let session = runner
+        .start_session(&session_args)
+        .await
+        .map_err(|e| RunnerError::Spawn(e.to_string()))?;
 
     // Run Session (Core Logic)
-    let run_result = run_session(session, &cfg.control, policy, args.capture_bytes, events_out_tx.clone(), &run_id, stream_format).await?;
+    let run_result = run_session(
+        session,
+        &cfg.control,
+        policy,
+        args.capture_bytes,
+        events_out_tx.clone(),
+        &run_id,
+        stream_plan.silent,
+    )
+    .await?;
+
+    let effective_run_id = run_result.run_id.clone();
+
+    // Flush buffered wrapper events with a consistent run_id.
+    for mut ev in pending_wrapper_events {
+        ev.run_id = Some(effective_run_id.clone());
+        write_wrapper_event(events_out_tx.as_ref(), &ev).await;
+    }
 
     if run_result.dropped_lines > 0 {
         let mut ev = WrapperEvent::new("tee.drop", Utc::now().to_rfc3339());
-        ev.run_id = Some(run_id.clone());
+        ev.run_id = Some(effective_run_id.clone());
         ev.data = Some(serde_json::json!({ "dropped_lines": run_result.dropped_lines }));
         write_wrapper_event(events_out_tx.as_ref(), &ev).await;
     }
@@ -163,7 +218,7 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
     );
 
     let mut decision_event = WrapperEvent::new("gatekeeper.decision", Utc::now().to_rfc3339());
-    decision_event.run_id = Some(run_id.clone());
+    decision_event.run_id = Some(effective_run_id.clone());
     decision_event.data = Some(serde_json::json!({
         "decision": serde_json::to_value(&decision).unwrap_or(serde_json::Value::Null),
     }));
@@ -189,7 +244,7 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
     }
 
     let mut exit_event = WrapperEvent::new("run.end", Utc::now().to_rfc3339());
-    exit_event.run_id = Some(run_id);
+    exit_event.run_id = Some(effective_run_id);
     exit_event.data = Some(serde_json::json!({
         "exit_code": run_outcome.exit_code,
         "duration_ms": run_outcome.duration_ms,
@@ -245,11 +300,9 @@ async fn build_merged_prompt(
     min_score: f32,
     gk_cfg: &LogicGatekeeperConfig,
     inject_cfg: &memex_core::memory::InjectConfig,
-    events_out: Option<&EventsOutTx>,
-    run_id: &str,
-) -> (String, Vec<String>, Vec<SearchMatch>) {
+ ) -> (String, Vec<String>, Vec<SearchMatch>, Option<WrapperEvent>) {
     if memory.is_none() {
-        return (user_query.to_string(), vec![], vec![]);
+        return (user_query.to_string(), vec![], vec![], None);
     }
     let mem = memory.unwrap();
 
@@ -264,17 +317,15 @@ async fn build_merged_prompt(
         Ok(m) => m,
         Err(e) => {
             tracing::warn!("memory search failed: {}", e);
-            return (user_query.to_string(), vec![], vec![]);
+            return (user_query.to_string(), vec![], vec![], None);
         }
     };
     
     let mut ev = WrapperEvent::new("memory.search.result", Utc::now().to_rfc3339());
-    ev.run_id = Some(run_id.to_string());
     ev.data = Some(serde_json::json!({
         "query": user_query,
         "matches": matches.clone(),
     }));
-    write_wrapper_event(events_out, &ev).await;
 
     let run_outcome = RunOutcome {
         exit_code: 0,
@@ -293,5 +344,5 @@ async fn build_merged_prompt(
     let merged = merge_prompt(user_query, &memory_ctx);
     let shown = decision.inject_list.iter().map(|x| x.qa_id.clone()).collect();
 
-    (merged, shown, matches)
+    (merged, shown, matches, Some(ev))
 }

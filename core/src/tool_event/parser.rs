@@ -33,3 +33,29 @@ impl ToolEventParser for PrefixedJsonlParser {
         format!("{} {}", self.prefix, json)
     }
 }
+
+pub struct CompositeToolEventParser {
+    prefixed: PrefixedJsonlParser,
+    stream_json: crate::tool_event::StreamJsonToolEventParser,
+}
+
+impl CompositeToolEventParser {
+    pub fn new(prefix: &'static str) -> Self {
+        Self {
+            prefixed: PrefixedJsonlParser::new(prefix),
+            stream_json: crate::tool_event::StreamJsonToolEventParser::new(),
+        }
+    }
+}
+
+impl ToolEventParser for CompositeToolEventParser {
+    fn parse_line(&mut self, line: &str) -> Option<ToolEvent> {
+        self.prefixed
+            .parse_line(line)
+            .or_else(|| self.stream_json.parse_line(line))
+    }
+
+    fn format_line(&self, ev: &ToolEvent) -> String {
+        self.prefixed.format_line(ev)
+    }
+}

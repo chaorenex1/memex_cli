@@ -1,5 +1,12 @@
 ﻿use clap::{Parser, Subcommand, Args as ClapArgs};
 
+#[derive(clap::ValueEnum, Debug, Clone, Copy)]
+pub enum BackendKind {
+    Auto,
+    Codecli,
+    Aiservice,
+}
+
 #[derive(Parser, Debug)]
 pub struct Args {
     #[command(subcommand)]
@@ -20,6 +27,13 @@ pub struct RunArgs {
     #[arg(long)]
     pub backend: String,
 
+    /// Explicitly select how to interpret `--backend`.
+    /// - auto: URL => aiservice, otherwise => codecli
+    /// - codecli: treat backend as a local binary name/path
+    /// - aiservice: treat backend as an http(s) URL
+    #[arg(long, value_enum, default_value_t = BackendKind::Auto)]
+    pub backend_kind: BackendKind,
+
     #[arg(long)]
     pub model: Option<String>,
 
@@ -37,6 +51,11 @@ pub struct RunArgs {
 
     #[arg(long, default_value = "text")]
     pub stream_format: String,
+
+    /// Extra environment variables to pass to the backend process (KEY=VALUE).
+    /// Can be specified multiple times.
+    #[arg(long = "env", action = clap::ArgAction::Append)]
+    pub env: Vec<String>,
 
     #[arg(long)]
     pub project_id: Option<String>,

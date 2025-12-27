@@ -36,6 +36,7 @@ pub struct RunnerStartArgs {
 
 #[derive(Debug, Clone)]
 pub struct RunnerResult {
+    pub run_id: String,
     pub exit_code: i32,
     pub duration_ms: Option<u64>,
     pub stdout_tail: String,

@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 use crate::config::ControlConfig;
 use crate::error::RunnerError;
 use crate::events_out::EventsOutTx;
-use crate::tool_event::{PrefixedJsonlParser, ToolEventRuntime, TOOL_EVENT_PREFIX};
+use crate::tool_event::{CompositeToolEventParser, ToolEventRuntime, TOOL_EVENT_PREFIX};
 use crate::util::RingBytes;
 
 use super::tee;
@@ -22,7 +22,7 @@ pub async fn run_session(
     capture_bytes: usize,
     events_out: Option<EventsOutTx>,
     run_id: &str,
-    stream_format: &str,
+    silent: bool,
 ) -> Result<RunnerResult, RunnerError> {
     let stdout = session
         .stdout()
@@ -36,8 +36,6 @@ pub async fn run_session(
 
     let ring_out = RingBytes::new(capture_bytes);
     let ring_err = RingBytes::new(capture_bytes);
-
-    let silent = stream_format == "jsonl";
 
     let (line_tx, mut line_rx) = mpsc::channel::<tee::LineTap>(control.line_tap_channel_capacity);
     let out_task = tee::pump_stdout(stdout, ring_out.clone(), line_tx.clone(), silent);
@@ -64,8 +62,8 @@ pub async fn run_session(
     let decision_timeout = Duration::from_millis(control.decision_timeout_ms);
     let mut tick = tokio::time::interval(Duration::from_millis(control.tick_interval_ms));
 
-    let parser = PrefixedJsonlParser::new(TOOL_EVENT_PREFIX);
-    let mut tool_runtime = ToolEventRuntime::new(parser, events_out.clone());
+    let parser = CompositeToolEventParser::new(TOOL_EVENT_PREFIX);
+    let mut tool_runtime = ToolEventRuntime::new(parser, events_out.clone(), Some(run_id.to_string()));
 
     let (exit_status, abort_reason) = {
         let wait_fut = session.wait();
@@ -140,15 +138,17 @@ pub async fn run_session(
     };
 
     if let Some(reason) = abort_reason {
+        let effective_run_id = tool_runtime.effective_run_id().unwrap_or(run_id);
         abort_sequence(
             &mut session,
             &ctl_tx,
-            run_id,
+            effective_run_id,
             control.abort_grace_ms,
             &reason,
         )
         .await;
         return Ok(RunnerResult {
+            run_id: effective_run_id.to_string(),
             exit_code: 40,
             duration_ms: None,
             stdout_tail: String::new(),
@@ -174,8 +174,10 @@ pub async fn run_session(
 
     let tool_events = tool_runtime.take_events();
     let dropped = tool_runtime.dropped_events_out();
+    let effective_run_id = tool_runtime.effective_run_id().unwrap_or(run_id).to_string();
 
     Ok(RunnerResult {
+        run_id: effective_run_id,
         exit_code,
         duration_ms: Some(start_time.elapsed().as_millis() as u64),
         stdout_tail,
