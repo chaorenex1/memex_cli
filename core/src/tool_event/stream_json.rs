@@ -103,7 +103,10 @@ impl StreamJsonToolEventParser {
                             }
                         });
 
-                    let output = item.get("content").cloned().or_else(|| v.get("tool_use_result").cloned());
+                    let output = item
+                        .get("content")
+                        .cloned()
+                        .or_else(|| v.get("tool_use_result").cloned());
 
                     return Some(ToolEvent {
                         v: 1,
@@ -125,8 +128,14 @@ impl StreamJsonToolEventParser {
 
         // Gemini stream-json
         if v.get("type").and_then(|x| x.as_str()) == Some("tool_use") {
-            let tool = v.get("tool_name").and_then(|x| x.as_str()).map(|x| x.to_string());
-            let id = v.get("tool_id").and_then(|x| x.as_str()).map(|x| x.to_string());
+            let tool = v
+                .get("tool_name")
+                .and_then(|x| x.as_str())
+                .map(|x| x.to_string());
+            let id = v
+                .get("tool_id")
+                .and_then(|x| x.as_str())
+                .map(|x| x.to_string());
             let ts = v
                 .get("timestamp")
                 .and_then(|x| x.as_str())
@@ -154,7 +163,10 @@ impl StreamJsonToolEventParser {
         }
 
         if v.get("type").and_then(|x| x.as_str()) == Some("tool_result") {
-            let id = v.get("tool_id").and_then(|x| x.as_str()).map(|x| x.to_string());
+            let id = v
+                .get("tool_id")
+                .and_then(|x| x.as_str())
+                .map(|x| x.to_string());
             let ts = v
                 .get("timestamp")
                 .and_then(|x| x.as_str())
@@ -236,7 +248,10 @@ impl StreamJsonToolEventParser {
                     };
 
                     let output = item.get("result").cloned();
-                    let error = item.get("error").and_then(|x| x.as_str()).map(|x| x.to_string());
+                    let error = item
+                        .get("error")
+                        .and_then(|x| x.as_str())
+                        .map(|x| x.to_string());
 
                     return Some(ToolEvent {
                         v: 1,
@@ -272,7 +287,10 @@ mod tests {
         let ev1 = p.parse_line(use_line).expect("tool_use should parse");
         assert_eq!(ev1.event_type, "tool.request");
         assert_eq!(ev1.tool.as_deref(), Some("run_shell_command"));
-        assert_eq!(ev1.id.as_deref(), Some("run_shell_command-1766753316765-e8db"));
+        assert_eq!(
+            ev1.id.as_deref(),
+            Some("run_shell_command-1766753316765-e8db")
+        );
 
         let result_line = r#"{"type":"tool_result","timestamp":"2025-12-26T12:48:38.811Z","tool_id":"run_shell_command-1766753316765-e8db","status":"success","output":""}"#;
         let ev2 = p.parse_line(result_line).expect("tool_result should parse");
@@ -293,7 +311,9 @@ mod tests {
         assert_eq!(ev1.tool.as_deref(), Some("aduib-mcp-sever.retrieve_qa_kb"));
 
         let completed = r#"{"type":"item.completed","item":{"id":"item_1","type":"mcp_tool_call","server":"aduib-mcp-sever","tool":"retrieve_qa_kb","arguments":{"query":"x"},"result":{"content":[{"type":"text","text":"ok"}]},"error":null,"status":"completed"}}"#;
-        let ev2 = p.parse_line(completed).expect("item.completed should parse");
+        let ev2 = p
+            .parse_line(completed)
+            .expect("item.completed should parse");
         assert_eq!(ev2.event_type, "tool.result");
         assert_eq!(ev2.ok, Some(true));
         assert_eq!(ev2.id.as_deref(), Some("item_1"));

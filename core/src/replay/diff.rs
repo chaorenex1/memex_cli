@@ -1,4 +1,4 @@
-﻿use serde_json::Value;
+use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct DecisionDiff {
@@ -49,7 +49,10 @@ pub fn diff_gatekeeper_decision(baseline: Option<&Value>, rerun: &Value) -> Deci
             let bv = b_signals.as_ref().and_then(|x| x.get(k)).cloned();
             let rv = r_signals.as_ref().and_then(|x| x.get(k)).cloned();
             if bv != rv {
-                lines.push(format!("signals.{k} changed: baseline={:?} rerun={:?}", bv, rv));
+                lines.push(format!(
+                    "signals.{k} changed: baseline={:?} rerun={:?}",
+                    bv, rv
+                ));
             }
         }
     } else {

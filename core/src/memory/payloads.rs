@@ -51,7 +51,10 @@ pub fn build_validate_payloads(
         .collect()
 }
 
-pub fn build_candidate_payloads(project_id: &str, drafts: &[CandidateDraft]) -> Vec<QACandidatePayload> {
+pub fn build_candidate_payloads(
+    project_id: &str,
+    drafts: &[CandidateDraft],
+) -> Vec<QACandidatePayload> {
     drafts
         .iter()
         .map(|d| QACandidatePayload {

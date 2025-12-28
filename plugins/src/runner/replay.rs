@@ -1,9 +1,9 @@
-use async_trait::async_trait;
-use tokio::io::{AsyncRead, AsyncWrite};
-use anyhow::Result;
 use super::{RunOutcome, RunnerPlugin, RunnerSession, RunnerStartArgs, Signal};
+use anyhow::Result;
+use async_trait::async_trait;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub struct ReplayRunnerPlugin {
     events_file: String,

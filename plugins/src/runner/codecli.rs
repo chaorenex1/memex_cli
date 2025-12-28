@@ -1,9 +1,9 @@
-use async_trait::async_trait;
-use tokio::io::{AsyncRead, AsyncWrite};
-use anyhow::Result;
-use tokio::process::{Command, Child};
-use std::process::Stdio;
 use super::{RunOutcome, RunnerPlugin, RunnerSession, RunnerStartArgs, Signal};
+use anyhow::Result;
+use async_trait::async_trait;
+use std::process::Stdio;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::process::{Child, Command};
 
 pub struct CodeCliRunnerPlugin {}
 
@@ -45,15 +45,24 @@ struct CodeCliRunnerSession {
 #[async_trait]
 impl RunnerSession for CodeCliRunnerSession {
     fn stdin(&mut self) -> Option<Box<dyn AsyncWrite + Unpin + Send>> {
-        self.child.stdin.take().map(|s| Box::new(s) as Box<dyn AsyncWrite + Unpin + Send>)
+        self.child
+            .stdin
+            .take()
+            .map(|s| Box::new(s) as Box<dyn AsyncWrite + Unpin + Send>)
     }
 
     fn stdout(&mut self) -> Option<Box<dyn AsyncRead + Unpin + Send>> {
-        self.child.stdout.take().map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>)
+        self.child
+            .stdout
+            .take()
+            .map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>)
     }
 
     fn stderr(&mut self) -> Option<Box<dyn AsyncRead + Unpin + Send>> {
-        self.child.stderr.take().map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>)
+        self.child
+            .stderr
+            .take()
+            .map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>)
     }
 
     async fn signal(&mut self, signal: Signal) -> Result<()> {

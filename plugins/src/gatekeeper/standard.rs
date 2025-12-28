@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
-use memex_core::gatekeeper::{Gatekeeper, GatekeeperConfig, GatekeeperDecision, GatekeeperPlugin, SearchMatch};
+use memex_core::gatekeeper::{
+    Gatekeeper, GatekeeperConfig, GatekeeperDecision, GatekeeperPlugin, SearchMatch,
+};
 use memex_core::runner::RunOutcome;
 use memex_core::tool_event::ToolEvent;
 
@@ -23,7 +25,7 @@ impl GatekeeperPlugin for StandardGatekeeperPlugin {
         now: DateTime<Utc>,
         matches: &[SearchMatch],
         outcome: &RunOutcome,
-        events: &[ToolEvent]
+        events: &[ToolEvent],
     ) -> GatekeeperDecision {
         // Delegate to existing logic in src/gatekeeper/evaluate.rs
         // We might want to move that logic here eventually, but for now delegating is safer.

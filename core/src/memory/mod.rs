@@ -21,4 +21,3 @@ pub use candidates::extract_candidates;
 pub use payloads::{build_candidate_payloads, build_hit_payload, build_validate_payloads};
 pub use render::{merge_prompt, render_memory_context};
 pub use types::{CandidateDraft, CandidateExtractConfig, InjectConfig, InjectPlacement};
-

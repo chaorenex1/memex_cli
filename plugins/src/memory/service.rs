@@ -1,10 +1,12 @@
-use async_trait::async_trait;
-use anyhow::Result;
-use memex_core::memory::client::MemoryClient;
-use memex_core::memory::parse_search_matches;
-use memex_core::memory::models::{QASearchPayload, QAHitsPayload, QACandidatePayload, QAValidationPayload};
-use memex_core::gatekeeper::SearchMatch;
 use super::r#trait::MemoryPlugin;
+use anyhow::Result;
+use async_trait::async_trait;
+use memex_core::gatekeeper::SearchMatch;
+use memex_core::memory::client::MemoryClient;
+use memex_core::memory::models::{
+    QACandidatePayload, QAHitsPayload, QASearchPayload, QAValidationPayload,
+};
+use memex_core::memory::parse_search_matches;
 
 pub struct MemoryServicePlugin {
     client: MemoryClient,

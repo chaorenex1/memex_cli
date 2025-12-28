@@ -17,7 +17,8 @@ pub trait RunnerSession: Send {
 #[async_trait]
 pub trait RunnerPlugin: Send + Sync {
     fn name(&self) -> &str;
-    async fn start_session(&self, args: &RunnerStartArgs) -> anyhow::Result<Box<dyn RunnerSession>>;
+    async fn start_session(&self, args: &RunnerStartArgs)
+        -> anyhow::Result<Box<dyn RunnerSession>>;
 }
 
 #[async_trait]

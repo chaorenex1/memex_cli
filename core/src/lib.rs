@@ -1,11 +1,11 @@
-pub mod config;
 pub mod backend;
+pub mod config;
 pub mod error;
 pub mod events_out;
-pub mod stream;
 pub mod gatekeeper;
 pub mod memory;
 pub mod replay;
 pub mod runner;
+pub mod stream;
 pub mod tool_event;
 pub mod util;

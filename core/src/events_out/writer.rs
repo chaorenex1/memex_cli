@@ -1,4 +1,4 @@
-﻿use tokio::io::AsyncWriteExt;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
 use crate::config::EventsOutConfig;
@@ -12,8 +12,7 @@ pub struct EventsOutTx {
 
 impl EventsOutTx {
     pub fn dropped_count(&self) -> u64 {
-        self.dropped
-            .load(std::sync::atomic::Ordering::Relaxed)
+        self.dropped.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub async fn send_line(&self, line: String) {

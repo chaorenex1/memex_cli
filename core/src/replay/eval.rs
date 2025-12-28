@@ -1,4 +1,4 @@
-﻿use crate::gatekeeper::{Gatekeeper, GatekeeperConfig, SearchMatch};
+use crate::gatekeeper::{Gatekeeper, GatekeeperConfig, SearchMatch};
 use crate::memory::parse_search_matches;
 use crate::replay::model::ReplayRun;
 use crate::runner::RunOutcome;
@@ -28,7 +28,10 @@ pub fn rerun_gatekeeper_for_run(
         };
     };
 
-    let matches_v = data.get("matches").cloned().unwrap_or(serde_json::Value::Null);
+    let matches_v = data
+        .get("matches")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     let matches: Vec<SearchMatch> = match parse_search_matches(&matches_v) {
         Ok(m) => m,
         Err(e) => {
@@ -66,7 +69,10 @@ fn build_run_outcome_from_exit(run: &ReplayRun) -> RunOutcome {
     if let Some(exit) = &run.runner_exit {
         if let Some(d) = &exit.data {
             out.exit_code = d.get("exit_code").and_then(|v| v.as_i64()).unwrap_or(-999) as i32;
-            out.duration_ms = d.get("duration_ms").and_then(|v| v.as_i64()).map(|x| x as u64);
+            out.duration_ms = d
+                .get("duration_ms")
+                .and_then(|v| v.as_i64())
+                .map(|x| x as u64);
             out.stdout_tail = d
                 .get("stdout_tail")
                 .and_then(|v| v.as_str())

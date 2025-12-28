@@ -1,4 +1,4 @@
-﻿use serde::Deserialize;
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::gatekeeper::SearchMatch;
@@ -102,6 +102,9 @@ pub fn parse_search_matches(v: &Value) -> Result<Vec<SearchMatch>, String> {
     if !out.is_empty() {
         Ok(out)
     } else {
-        Err(format!("failed to parse all search items: {}", errs.join("; ")))
+        Err(format!(
+            "failed to parse all search items: {}",
+            errs.join("; ")
+        ))
     }
 }

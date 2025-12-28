@@ -3,8 +3,8 @@ pub mod decision;
 pub mod evaluate;
 pub mod gatekeeper_reasons;
 mod helpers;
-pub mod r#trait;
 pub mod signals;
+pub mod r#trait;
 
 pub use config::GatekeeperConfig;
 pub use decision::{GatekeeperDecision, HitRef, InjectItem, SearchMatch, ValidatePlan};

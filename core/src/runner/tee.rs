@@ -54,10 +54,10 @@ where
         let mut line_buf: Vec<u8> = Vec::with_capacity(8 * 1024);
 
         loop {
-            let n = rd
-                .read(&mut buf)
-                .await
-                .map_err(|e| RunnerError::StreamIo { stream: label, source: e })?;
+            let n = rd.read(&mut buf).await.map_err(|e| RunnerError::StreamIo {
+                stream: label,
+                source: e,
+            })?;
             if n == 0 {
                 break;
             }
@@ -67,7 +67,10 @@ where
             if !silent {
                 wr.write_all(&buf[..n])
                     .await
-                    .map_err(|e| RunnerError::StreamIo { stream: label, source: e })?;
+                    .map_err(|e| RunnerError::StreamIo {
+                        stream: label,
+                        source: e,
+                    })?;
             }
             total += n as u64;
 

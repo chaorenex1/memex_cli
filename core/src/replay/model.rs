@@ -16,4 +16,3 @@ pub struct ReplayRun {
     pub gatekeeper_decision: Option<WrapperEvent>,
     pub derived: Value,
 }
-

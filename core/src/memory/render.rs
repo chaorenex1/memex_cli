@@ -26,7 +26,11 @@ pub fn render_memory_context(items: &[InjectItem], cfg: &InjectConfig) -> String
                 it.validation_level,
                 it.trust,
                 it.score,
-                if it.tags.is_empty() { "-".to_string() } else { it.tags.join(",") }
+                if it.tags.is_empty() {
+                    "-".to_string()
+                } else {
+                    it.tags.join(",")
+                }
             ));
         }
         out.push('\n');

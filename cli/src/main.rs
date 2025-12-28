@@ -4,8 +4,8 @@ mod commands;
 use commands::cli;
 use memex_core::error;
 use memex_core::replay;
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::EnvFilter;
 
 static LOG_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> =
     std::sync::OnceLock::new();
@@ -25,7 +25,8 @@ async fn main() {
 
 async fn real_main() -> Result<i32, error::CliError> {
     let mut args = cli::Args::parse();
-    let cfg = memex_core::config::load_default().map_err(|e| error::CliError::Config(e.to_string()))?;
+    let cfg =
+        memex_core::config::load_default().map_err(|e| error::CliError::Config(e.to_string()))?;
     init_tracing(&cfg.logging).map_err(error::CliError::Command)?;
 
     let cmd = args.command.take();
@@ -59,7 +60,11 @@ fn exit_code_for_error(e: &error::CliError) -> i32 {
     }
 }
 
-async fn dispatch(cmd: cli::Commands, args: cli::Args, cfg: memex_core::config::AppConfig) -> Result<i32, error::CliError> {
+async fn dispatch(
+    cmd: cli::Commands,
+    args: cli::Args,
+    cfg: memex_core::config::AppConfig,
+) -> Result<i32, error::CliError> {
     match cmd {
         cli::Commands::Run(run_args) => {
             let exit = app::run_app_with_config(args, Some(run_args), None, cfg).await?;
@@ -78,7 +83,8 @@ async fn dispatch(cmd: cli::Commands, args: cli::Args, cfg: memex_core::config::
         }
         cli::Commands::Resume(resume_args) => {
             let recover_id = Some(resume_args.run_id.clone());
-            let exit = app::run_app_with_config(args, Some(resume_args.run_args), recover_id, cfg).await?;
+            let exit =
+                app::run_app_with_config(args, Some(resume_args.run_args), recover_id, cfg).await?;
             Ok(exit)
         }
     }

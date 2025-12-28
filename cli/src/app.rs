@@ -1,18 +1,17 @@
 use chrono::Utc;
 
-use crate::commands::cli::{Args, RunArgs, BackendKind, TaskLevel};
+use crate::commands::cli::{Args, BackendKind, RunArgs, TaskLevel};
 use memex_core::config::MemoryProvider;
-use memex_core::memory::InjectPlacement;
-use memex_core::gatekeeper::config::GatekeeperConfig as LogicGatekeeperConfig;
 use memex_core::error::RunnerError;
 use memex_core::events_out::{start_events_out, write_wrapper_event};
-use memex_core::gatekeeper::{Gatekeeper, SearchMatch, GatekeeperDecision};
+use memex_core::gatekeeper::config::GatekeeperConfig as LogicGatekeeperConfig;
+use memex_core::gatekeeper::{Gatekeeper, GatekeeperDecision, SearchMatch};
+use memex_core::memory::InjectPlacement;
+use memex_core::memory::MemoryPlugin;
 use memex_core::memory::{
     build_candidate_payloads, build_hit_payload, build_validate_payloads, extract_candidates,
-    merge_prompt, render_memory_context, CandidateExtractConfig,
-    QASearchPayload, CandidateDraft
+    merge_prompt, render_memory_context, CandidateDraft, CandidateExtractConfig, QASearchPayload,
 };
-use memex_core::memory::MemoryPlugin;
 use memex_core::runner::{run_session, RunOutcome, RunnerResult, RunnerStartArgs};
 use memex_core::tool_event::{ToolEventLite, WrapperEvent};
 
@@ -39,19 +38,19 @@ pub async fn run_app_with_config(
         } else if ra.stdin {
             use std::io::Read;
             let mut content = String::new();
-            std::io::stdin()
-                .read_to_string(&mut content)
-                .map_err(|e| RunnerError::Spawn(format!("failed to read prompt from stdin: {}", e)))?;
+            std::io::stdin().read_to_string(&mut content).map_err(|e| {
+                RunnerError::Spawn(format!("failed to read prompt from stdin: {}", e))
+            })?;
             prompt_text = Some(content);
         }
 
         if let Some(pid) = &ra.project_id {
             cfg.project_id = pid.clone();
         }
-        
+
         if let Some(url) = &ra.memory_base_url {
-             let MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
-             svc_cfg.base_url = url.clone();
+            let MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
+            svc_cfg.base_url = url.clone();
         }
         if let Some(key) = &ra.memory_api_key {
             let MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
@@ -67,7 +66,9 @@ pub async fn run_app_with_config(
     let stream = factory::build_stream(stream_format);
     let stream_plan = stream.apply(&mut cfg);
 
-    let user_query = prompt_text.clone().unwrap_or_else(|| args.codecli_args.join(" "));
+    let user_query = prompt_text
+        .clone()
+        .unwrap_or_else(|| args.codecli_args.join(" "));
 
     let effective_task_level = match run_args.as_ref().map(|ra| ra.task_level) {
         Some(TaskLevel::Auto) | None => infer_task_level(&user_query),
@@ -83,7 +84,9 @@ pub async fn run_app_with_config(
     let policy = factory::build_policy(&cfg);
     let gatekeeper = factory::build_gatekeeper(&cfg);
 
-    let run_id = recover_run_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let run_id = recover_run_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     tracing::debug!(run_id = %run_id, stream_format = %stream_format, "run initialized");
 
     let gk_logic_cfg: LogicGatekeeperConfig = cfg.gatekeeper_logic_config();
@@ -234,12 +237,7 @@ pub async fn run_app_with_config(
 
     let run_outcome: RunOutcome = build_run_outcome(&run_result, shown_qa_ids);
 
-    let decision = gatekeeper.evaluate(
-        Utc::now(),
-        &matches,
-        &run_outcome,
-        &run_result.tool_events,
-    );
+    let decision = gatekeeper.evaluate(Utc::now(), &matches, &run_outcome, &run_result.tool_events);
 
     let mut decision_event = WrapperEvent::new("gatekeeper.decision", Utc::now().to_rfc3339());
     decision_event.run_id = Some(effective_run_id.clone());
@@ -381,7 +379,7 @@ async fn build_merged_prompt(
     min_score: f32,
     gk_cfg: &LogicGatekeeperConfig,
     inject_cfg: &memex_core::memory::InjectConfig,
- ) -> (String, Vec<String>, Vec<SearchMatch>, Option<WrapperEvent>) {
+) -> (String, Vec<String>, Vec<SearchMatch>, Option<WrapperEvent>) {
     if memory.is_none() {
         return (user_query.to_string(), vec![], vec![], None);
     }
@@ -401,7 +399,7 @@ async fn build_merged_prompt(
             return (user_query.to_string(), vec![], vec![], None);
         }
     };
-    
+
     let mut ev = WrapperEvent::new("memory.search.result", Utc::now().to_rfc3339());
     ev.data = Some(serde_json::json!({
         "query": user_query,
@@ -418,12 +416,21 @@ async fn build_merged_prompt(
         used_qa_ids: vec![],
     };
 
-    let decision =
-        Gatekeeper::evaluate(gk_cfg, Utc::now(), &matches, &run_outcome, &run_outcome.tool_events);
+    let decision = Gatekeeper::evaluate(
+        gk_cfg,
+        Utc::now(),
+        &matches,
+        &run_outcome,
+        &run_outcome.tool_events,
+    );
 
     let memory_ctx = render_memory_context(&decision.inject_list, inject_cfg);
     let merged = merge_prompt(user_query, &memory_ctx);
-    let shown = decision.inject_list.iter().map(|x| x.qa_id.clone()).collect();
+    let shown = decision
+        .inject_list
+        .iter()
+        .map(|x| x.qa_id.clone())
+        .collect();
 
     (merged, shown, matches, Some(ev))
 }

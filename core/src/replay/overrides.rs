@@ -19,7 +19,9 @@ pub fn apply_overrides(
             "min_level_inject" => cfg.min_level_inject = parse_i32(key, val)?,
             "min_level_fallback" => cfg.min_level_fallback = parse_i32(key, val)?,
             "min_trust_show" => cfg.min_trust_show = parse_f32(key, val)?,
-            "block_if_consecutive_fail_ge" => cfg.block_if_consecutive_fail_ge = parse_i32(key, val)?,
+            "block_if_consecutive_fail_ge" => {
+                cfg.block_if_consecutive_fail_ge = parse_i32(key, val)?
+            }
             "skip_if_top1_score_ge" => cfg.skip_if_top1_score_ge = parse_f32(key, val)?,
             "exclude_stale_by_default" => cfg.exclude_stale_by_default = parse_bool(key, val)?,
             "active_statuses" => cfg.active_statuses = parse_statuses(val),

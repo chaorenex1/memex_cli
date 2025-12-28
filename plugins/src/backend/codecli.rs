@@ -135,10 +135,7 @@ impl BackendStrategy for CodeCliBackendStrategy {
 
 fn backend_basename_lower(backend: &str) -> String {
     let p = Path::new(backend);
-    let s = p
-        .file_stem()
-        .and_then(|x| x.to_str())
-        .unwrap_or(backend);
+    let s = p.file_stem().and_then(|x| x.to_str()).unwrap_or(backend);
     s.to_ascii_lowercase()
 }
 

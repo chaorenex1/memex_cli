@@ -1,4 +1,4 @@
-﻿use serde_json::Value;
+use serde_json::Value;
 
 use super::model::ReplayRun;
 
@@ -49,11 +49,16 @@ pub fn format_text(report: &Value) -> String {
     let mut out = String::new();
     let totals = report.get("totals");
 
-    out.push_str("Replay report
-");
+    out.push_str(
+        "Replay report
+",
+    );
     if let Some(t) = totals {
-        out.push_str(&format!("runs: {}
-", t.get("runs").unwrap_or(&Value::Null)));
+        out.push_str(&format!(
+            "runs: {}
+",
+            t.get("runs").unwrap_or(&Value::Null)
+        ));
         out.push_str(&format!(
             "tool_events: {}
 ",
@@ -78,16 +83,31 @@ pub fn format_text(report: &Value) -> String {
 
     if let Some(runs) = report.get("runs").and_then(|v| v.as_array()) {
         for r in runs {
-            out.push_str(&format!("- run_id: {}
-", r.get("run_id").unwrap_or(&Value::Null)));
-            out.push_str(&format!("  tool_events: {}
-", r.get("tool_events").unwrap_or(&Value::Null)));
-            out.push_str(&format!("  has_exit: {}
-", r.get("has_exit").unwrap_or(&Value::Null)));
-            out.push_str(&format!("  has_drop: {}
-", r.get("has_drop").unwrap_or(&Value::Null)));
-            out.push_str(&format!("  has_search: {}
-", r.get("has_search").unwrap_or(&Value::Null)));
+            out.push_str(&format!(
+                "- run_id: {}
+",
+                r.get("run_id").unwrap_or(&Value::Null)
+            ));
+            out.push_str(&format!(
+                "  tool_events: {}
+",
+                r.get("tool_events").unwrap_or(&Value::Null)
+            ));
+            out.push_str(&format!(
+                "  has_exit: {}
+",
+                r.get("has_exit").unwrap_or(&Value::Null)
+            ));
+            out.push_str(&format!(
+                "  has_drop: {}
+",
+                r.get("has_drop").unwrap_or(&Value::Null)
+            ));
+            out.push_str(&format!(
+                "  has_search: {}
+",
+                r.get("has_search").unwrap_or(&Value::Null)
+            ));
 
             if let Some(derived) = r.get("derived") {
                 if let Some(rerun) = derived.get("rerun_gatekeeper") {
@@ -97,8 +117,11 @@ pub fn format_text(report: &Value) -> String {
                         .and_then(|d| d.get("changed"))
                         .unwrap_or(&Value::Null);
                     let reason = rerun.get("skip_reason").unwrap_or(&Value::Null);
-                    out.push_str(&format!("  rerun_gatekeeper: skipped={} changed={} reason={}
-", skipped, changed, reason));
+                    out.push_str(&format!(
+                        "  rerun_gatekeeper: skipped={} changed={} reason={}
+",
+                        skipped, changed, reason
+                    ));
 
                     if let Some(lines) = rerun
                         .get("diff")
@@ -112,8 +135,11 @@ pub fn format_text(report: &Value) -> String {
                             }
                         }
                         if !items.is_empty() {
-                            out.push_str(&format!("  rerun_diff: {}
-", items.join(" | ")));
+                            out.push_str(&format!(
+                                "  rerun_diff: {}
+",
+                                items.join(" | ")
+                            ));
                         }
                     }
                 }

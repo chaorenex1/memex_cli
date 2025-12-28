@@ -1,6 +1,8 @@
-use async_trait::async_trait;
 use crate::gatekeeper::SearchMatch;
-use crate::memory::models::{QASearchPayload, QAHitsPayload, QACandidatePayload, QAValidationPayload};
+use crate::memory::models::{
+    QACandidatePayload, QAHitsPayload, QASearchPayload, QAValidationPayload,
+};
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait MemoryPlugin: Send + Sync {

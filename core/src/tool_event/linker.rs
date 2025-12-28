@@ -43,7 +43,11 @@ pub fn extract_tool_steps(
 fn summarize_args(args: &Value, args_keys_max: usize, value_max_chars: usize) -> String {
     // 优先：如果有常见字段（query/path/url/code）就提取；否则列 keys
     if let Some(o) = args.as_object() {
-        for k in ["query", "q", "path", "filepath", "file", "url", "command", "cmd", "code"].iter() {
+        for k in [
+            "query", "q", "path", "filepath", "file", "url", "command", "cmd", "code",
+        ]
+        .iter()
+        {
             if let Some(v) = o.get(*k) {
                 return format!("{}={}", k, shorten(v, value_max_chars));
             }

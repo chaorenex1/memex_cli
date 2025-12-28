@@ -1,21 +1,21 @@
+pub mod correlate;
 pub mod linker;
+pub mod lite;
 pub mod metrics;
 pub mod model;
 pub mod multi_parser;
-pub mod correlate;
-pub mod lite;
 pub mod parser;
 pub mod run_id_extract;
 pub mod runtime;
 pub mod stream_json;
 pub mod wrapper_event;
 
+pub use correlate::{correlate_request_result, CorrelationStats, ToolCorrStats};
 pub use linker::{extract_tool_steps, ToolStep};
+pub use lite::ToolEventLite;
 pub use metrics::{build_tool_insights, ToolInsights};
 pub use model::{ToolEvent, TOOL_EVENT_PREFIX};
 pub use multi_parser::{format_tool_event_line, parse_tool_event_line, MultiToolEventLineParser};
-pub use correlate::{correlate_request_result, CorrelationStats, ToolCorrStats};
-pub use lite::ToolEventLite;
 pub use parser::{CompositeToolEventParser, PrefixedJsonlParser, ToolEventParser};
 pub use run_id_extract::extract_run_id_from_line;
 pub use runtime::ToolEventRuntime;

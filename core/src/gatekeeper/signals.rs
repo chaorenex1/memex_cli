@@ -1,4 +1,4 @@
-﻿use regex::Regex;
+use regex::Regex;
 use serde_json::Value;
 
 use crate::gatekeeper::SearchMatch;
@@ -39,7 +39,10 @@ impl Default for SignalHeuristics {
             Regex::new(r"(?i)\btraceback\b").unwrap(),
         ];
 
-        Self { success_patterns: success, fail_patterns: fail }
+        Self {
+            success_patterns: success,
+            fail_patterns: fail,
+        }
     }
 }
 
@@ -59,40 +62,46 @@ pub fn grade_validation_signal(
 
     let result = if is_pass { "pass" } else { "fail" }.to_string();
 
-    let (signal_strength, strong_signal, reason) = if is_pass
-        && hit_success
-        && used_qa_ids_count > 0
-        && failing_tools_count == 0
-    {
-        (
-            "strong".to_string(),
-            true,
-            "exit_code=0 + success markers + QA used".to_string(),
-        )
-    } else if is_pass && (hit_success || used_qa_ids_count > 0) {
-        (
-            "medium".to_string(),
-            false,
-            "exit_code=0 but not strong-enough markers".to_string(),
-        )
-    } else if !is_pass && hit_fail {
-        (
-            "medium".to_string(),
-            false,
-            "exit_code!=0 with explicit failure markers".to_string(),
-        )
-    } else {
-        (
-            "weak".to_string(),
-            false,
-            "insufficient evidence for strong/medium".to_string(),
-        )
-    };
+    let (signal_strength, strong_signal, reason) =
+        if is_pass && hit_success && used_qa_ids_count > 0 && failing_tools_count == 0 {
+            (
+                "strong".to_string(),
+                true,
+                "exit_code=0 + success markers + QA used".to_string(),
+            )
+        } else if is_pass && (hit_success || used_qa_ids_count > 0) {
+            (
+                "medium".to_string(),
+                false,
+                "exit_code=0 but not strong-enough markers".to_string(),
+            )
+        } else if !is_pass && hit_fail {
+            (
+                "medium".to_string(),
+                false,
+                "exit_code!=0 with explicit failure markers".to_string(),
+            )
+        } else {
+            (
+                "weak".to_string(),
+                false,
+                "insufficient evidence for strong/medium".to_string(),
+            )
+        };
 
-    ValidationSignal { result, signal_strength, strong_signal, reason }
+    ValidationSignal {
+        result,
+        signal_strength,
+        strong_signal,
+        reason,
+    }
 }
 
-pub fn build_signals(matches: &[SearchMatch], run: &RunOutcome, tool_corr: &CorrelationStats) -> Value {
+pub fn build_signals(
+    matches: &[SearchMatch],
+    run: &RunOutcome,
+    tool_corr: &CorrelationStats,
+) -> Value {
     let mut by_type: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut tools: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut failing: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();

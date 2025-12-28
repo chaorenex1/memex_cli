@@ -1,4 +1,4 @@
-﻿use serde_json::Value;
+use serde_json::Value;
 
 use super::models::{QACandidatePayload, QAHitsPayload, QASearchPayload, QAValidationPayload};
 
@@ -14,7 +14,11 @@ impl MemoryClient {
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_millis(timeout_ms))
             .build()?;
-        Ok(Self { base_url, api_key, http })
+        Ok(Self {
+            base_url,
+            api_key,
+            http,
+        })
     }
 
     fn auth(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {

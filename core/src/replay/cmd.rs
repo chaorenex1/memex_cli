@@ -1,8 +1,8 @@
 use crate::config::load_default;
 use crate::gatekeeper::GatekeeperConfig;
 
-use super::{aggregate, diff, eval, overrides, report};
 use super::types::ReplayArgs;
+use super::{aggregate, diff, eval, overrides, report};
 
 pub fn replay_cmd(args: ReplayArgs) -> Result<(), String> {
     let runs = aggregate::replay_events_file(&args.events, args.run_id.as_deref())?;

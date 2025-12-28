@@ -99,4 +99,3 @@ fn top_tools_lines(
         })
         .collect()
 }
-

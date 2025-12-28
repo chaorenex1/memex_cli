@@ -88,4 +88,3 @@ fn attach_wrapper(
         _ => run.memory_calls.push(w),
     }
 }
-

@@ -90,7 +90,9 @@ impl Gatekeeper {
                 })
         });
 
-        let has_strong = usable.iter().any(|m| m.validation_level >= cfg.min_level_inject);
+        let has_strong = usable
+            .iter()
+            .any(|m| m.validation_level >= cfg.min_level_inject);
 
         let mut inject_list: Vec<InjectItem> = Vec::new();
 
@@ -236,10 +238,19 @@ impl Gatekeeper {
                 "should_write_candidate".into(),
                 serde_json::json!(should_write_candidate),
             );
-            map.insert("tool_events_total".into(), serde_json::json!(insights.total));
-            map.insert("tool_events_by_type".into(), serde_json::json!(insights.by_type));
+            map.insert(
+                "tool_events_total".into(),
+                serde_json::json!(insights.total),
+            );
+            map.insert(
+                "tool_events_by_type".into(),
+                serde_json::json!(insights.by_type),
+            );
             map.insert("tools".into(), serde_json::json!(insights.tools));
-            map.insert("failing_tools".into(), serde_json::json!(insights.failing_tools));
+            map.insert(
+                "failing_tools".into(),
+                serde_json::json!(insights.failing_tools),
+            );
         }
 
         GatekeeperDecision {
@@ -267,7 +278,9 @@ fn to_inject_item(m: &SearchMatch) -> InjectItem {
 }
 
 fn is_stale(m: &SearchMatch, now: DateTime<Utc>) -> bool {
-    let Some(s) = &m.expiry_at else { return false; };
+    let Some(s) = &m.expiry_at else {
+        return false;
+    };
     match DateTime::parse_from_rfc3339(s) {
         Ok(dt) => dt.with_timezone(&Utc) <= now,
         Err(_) => false,
@@ -302,4 +315,3 @@ fn digest_cheap(s: &str, head_chars: usize, tail_chars: usize) -> Value {
 
     serde_json::json!({ "len": len, "head": head, "tail": tail })
 }
-

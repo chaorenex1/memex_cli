@@ -572,7 +572,9 @@ fn default_exclude_stale_by_default() -> bool {
     true
 }
 fn default_active_statuses() -> std::collections::HashSet<String> {
-    ["active".to_string(), "verified".to_string()].into_iter().collect()
+    ["active".to_string(), "verified".to_string()]
+        .into_iter()
+        .collect()
 }
 
 fn default_gatekeeper_digest_head_chars() -> usize {

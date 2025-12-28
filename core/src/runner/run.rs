@@ -72,7 +72,8 @@ pub async fn run_session(
     let mut tick = tokio::time::interval(Duration::from_millis(control.tick_interval_ms));
 
     let parser = CompositeToolEventParser::new(TOOL_EVENT_PREFIX);
-    let mut tool_runtime = ToolEventRuntime::new(parser, events_out.clone(), Some(run_id.to_string()));
+    let mut tool_runtime =
+        ToolEventRuntime::new(parser, events_out.clone(), Some(run_id.to_string()));
 
     let (exit_status, abort_reason) = {
         let wait_fut = session.wait();
@@ -183,7 +184,10 @@ pub async fn run_session(
 
     let tool_events = tool_runtime.take_events();
     let dropped = tool_runtime.dropped_events_out();
-    let effective_run_id = tool_runtime.effective_run_id().unwrap_or(run_id).to_string();
+    let effective_run_id = tool_runtime
+        .effective_run_id()
+        .unwrap_or(run_id)
+        .to_string();
 
     Ok(RunnerResult {
         run_id: effective_run_id,

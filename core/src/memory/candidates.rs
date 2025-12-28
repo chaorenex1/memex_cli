@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use crate::tool_event::{extract_tool_steps, ToolEvent, ToolStep, ToolEventLite};
+use crate::tool_event::{extract_tool_steps, ToolEvent, ToolEventLite, ToolStep};
 
 use super::helpers::{one_line, trim_mid, truncate_clean};
 use super::types::{CandidateDraft, CandidateExtractConfig};
@@ -84,7 +84,9 @@ pub fn extract_candidates(
             trim_mid(h, 80)
         ));
     } else {
-        answer.push_str("- If the fix doesn't work, capture the exact error line and tool versions.\n");
+        answer.push_str(
+            "- If the fix doesn't work, capture the exact error line and tool versions.\n",
+        );
     }
     answer.push_str("- Keep secrets (tokens/keys/passwords) out of logs and configs.\n");
 
@@ -171,7 +173,11 @@ fn extract_command_block(text: &str, context_lines: usize) -> Option<String> {
         out.push('\n');
     }
 
-    if out.trim().is_empty() { None } else { Some(out) }
+    if out.trim().is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 fn extract_error_hint(text: &str) -> Option<String> {
@@ -210,7 +216,11 @@ fn summarize_tool_events(events: &[ToolEventLite]) -> String {
     names.join(", ")
 }
 
-fn build_question(user_query: &str, err_hint: Option<&str>, tool_events: &[ToolEventLite]) -> String {
+fn build_question(
+    user_query: &str,
+    err_hint: Option<&str>,
+    tool_events: &[ToolEventLite],
+) -> String {
     if let Some(h) = err_hint {
         return format!(
             "How to resolve `{}` when running: {}",
