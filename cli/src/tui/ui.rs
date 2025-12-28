@@ -13,7 +13,11 @@ pub fn draw(f: &mut Frame<'_>, app: &TuiApp) {
         return;
     }
 
-    let input_height = if app.input_mode == InputMode::Prompt { 5 } else { 2 };
+    let input_height = if app.input_mode == InputMode::Prompt {
+        5
+    } else {
+        2
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -73,7 +77,8 @@ fn draw_header(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
         Span::styled(duration, Style::default().fg(Color::Gray)),
     ];
     if app.pending_qa {
-        let qa_elapsed = format_duration(app.qa_started_at.unwrap_or(app.start).elapsed().as_secs());
+        let qa_elapsed =
+            format_duration(app.qa_started_at.unwrap_or(app.start).elapsed().as_secs());
         line_parts.push(Span::raw("  QA: "));
         line_parts.push(Span::styled(qa_elapsed, Style::default().fg(Color::Yellow)));
     }
@@ -140,16 +145,28 @@ fn draw_raw_output(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
 
 fn draw_input(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     let hint = match app.input_mode {
-        InputMode::Prompt => "Enter: run  Shift+Enter: newline  Esc: cancel  Ctrl+C: quit"
-            .to_string(),
+        InputMode::Prompt => {
+            "Enter:run  Esc:clear  Ctrl+C/V/X:copy/paste/cut  Ctrl+D:quit".to_string()
+        }
         InputMode::Normal => {
-            if app.pending_qa {
-                let spinner = qa_spinner(app);
-                let qa_elapsed =
-                    format_duration(app.qa_started_at.unwrap_or(app.start).elapsed().as_secs());
-                format!("QA loading... {} ({})", spinner, qa_elapsed)
-            } else {
-                "q:quit  Tab:next  1/2/3:panel  j/k:scroll  p:pause".to_string()
+            // Show appropriate hint based on status
+            match &app.status {
+                RunStatus::Error(_) => {
+                    "ERROR - Press 'n' or Enter for new query, 'q' or Ctrl+C to exit".to_string()
+                }
+                RunStatus::Completed(_) => {
+                    "COMPLETED - Press 'n' or Enter for new query, 'q' or Ctrl+C to exit".to_string()
+                }
+                _ => {
+                    if app.pending_qa {
+                        let spinner = qa_spinner(app);
+                        let qa_elapsed =
+                            format_duration(app.qa_started_at.unwrap_or(app.start).elapsed().as_secs());
+                        format!("QA loading... {} ({})", spinner, qa_elapsed)
+                    } else {
+                        "q:quit  Tab:next  1/2/3:panel  j/k:scroll  p:pause".to_string()
+                    }
+                }
             }
         }
     };
@@ -192,15 +209,41 @@ fn qa_spinner(app: &TuiApp) -> char {
 fn build_prompt_lines(app: &TuiApp, hint: String) -> Vec<Line<'_>> {
     let mut lines = Vec::new();
     let mut first = true;
+    
+    // Get selection range if any
+    let selection = if let (Some(start), Some(end)) = (app.selection_start, app.selection_end) {
+        let (s, e) = if start <= end { (start, end) } else { (end, start) };
+        if s < e { Some((s, e)) } else { None }
+    } else {
+        None
+    };
+    
     for raw in app.input_buffer.split('\n') {
         if first {
-            lines.push(Line::from(vec![
-                Span::styled("> ", Style::default().fg(Color::Cyan)),
-                Span::raw(raw),
-            ]));
+            let spans = if let Some((sel_start, sel_end)) = selection {
+                build_line_with_selection(raw, 0, sel_start, sel_end, true)
+            } else {
+                vec![
+                    Span::styled("> ", Style::default().fg(Color::Cyan)),
+                    Span::raw(raw),
+                ]
+            };
+            lines.push(Line::from(spans));
             first = false;
         } else {
-            lines.push(Line::from(vec![Span::raw("  "), Span::raw(raw)]));
+            let line_start = lines.iter()
+                .take(lines.len())
+                .map(|_| app.input_buffer.split('\n').next().map(|s| s.len() + 1).unwrap_or(0))
+                .sum::<usize>();
+            
+            let spans = if let Some((sel_start, sel_end)) = selection {
+                let mut result = vec![Span::raw("  ")];
+                result.extend(build_line_with_selection(raw, line_start, sel_start, sel_end, false));
+                result
+            } else {
+                vec![Span::raw("  "), Span::raw(raw)]
+            };
+            lines.push(Line::from(spans));
         }
     }
     if lines.is_empty() {
@@ -209,8 +252,62 @@ fn build_prompt_lines(app: &TuiApp, hint: String) -> Vec<Line<'_>> {
             Span::raw(""),
         ]));
     }
-    lines.push(Line::from(Span::styled(hint, Style::default().fg(Color::Gray))));
+    lines.push(Line::from(Span::styled(
+        hint,
+        Style::default().fg(Color::Gray),
+    )));
     lines
+}
+
+fn build_line_with_selection(
+    text: &str,
+    line_start: usize,
+    sel_start: usize,
+    sel_end: usize,
+    is_first_line: bool,
+) -> Vec<Span<'_>> {
+    let line_end = line_start + text.len();
+    let mut spans = Vec::new();
+    
+    if is_first_line {
+        spans.push(Span::styled("> ", Style::default().fg(Color::Cyan)));
+    }
+    
+    // Before selection
+    if sel_start > line_start {
+        let before_end = sel_start.min(line_end);
+        if before_end > line_start {
+            let idx_start = 0;
+            let idx_end = (before_end - line_start).min(text.len());
+            spans.push(Span::raw(&text[idx_start..idx_end]));
+        }
+    }
+    
+    // Selection
+    if sel_end > line_start && sel_start < line_end {
+        let sel_local_start = sel_start.max(line_start) - line_start;
+        let sel_local_end = sel_end.min(line_end) - line_start;
+        if sel_local_end > sel_local_start {
+            let selected_text = &text[sel_local_start.min(text.len())..sel_local_end.min(text.len())];
+            spans.push(Span::styled(
+                selected_text,
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+    }
+    
+    // After selection
+    if sel_end < line_end {
+        let after_start = sel_end.max(line_start) - line_start;
+        if after_start < text.len() {
+            spans.push(Span::raw(&text[after_start..]));
+        }
+    }
+    
+    spans
 }
 
 fn prompt_cursor_pos(input: &str, cursor: usize) -> (usize, usize) {

@@ -1,7 +1,9 @@
 use clap::Parser;
 mod app;
 mod commands;
+mod flow;
 mod tui;
+mod utils;
 use commands::cli;
 use memex_core::context::AppContext;
 use memex_core::error;

@@ -15,7 +15,7 @@ pub enum TaskLevel {
     L3,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct Args {
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -117,7 +117,7 @@ pub struct ResumeArgs {
     pub run_id: String,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Run(RunArgs),
     Replay(ReplayArgs),

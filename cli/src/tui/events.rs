@@ -4,8 +4,13 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyEvent};
+use crossterm::event::{self, Event, KeyEvent, KeyEventKind, MouseEvent};
 use tokio::sync::mpsc;
+
+pub enum InputEvent {
+    Key(KeyEvent),
+    Mouse(MouseEvent),
+}
 
 pub struct InputReader {
     running: Arc<AtomicBool>,
@@ -13,17 +18,39 @@ pub struct InputReader {
 }
 
 impl InputReader {
-    pub fn start() -> (Self, mpsc::UnboundedReceiver<KeyEvent>) {
+    pub fn start() -> (Self, mpsc::UnboundedReceiver<InputEvent>) {
         let (tx, rx) = mpsc::unbounded_channel();
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = Arc::clone(&running);
         let handle = std::thread::spawn(move || {
             while thread_running.load(Ordering::SeqCst) {
                 if event::poll(Duration::from_millis(100)).unwrap_or(false) {
-                    if let Ok(Event::Key(key)) = event::read() {
-                        if tx.send(key).is_err() {
-                            break;
+                    match event::read() {
+                        Ok(Event::Key(key)) => {
+                            // CRITICAL: Only process Press events, ignore Release and Repeat
+                            // This prevents duplicate characters on Windows
+                            match key.kind {
+                                KeyEventKind::Press => {
+                                    tracing::trace!("Key pressed: {:?}", key);
+                                    if tx.send(InputEvent::Key(key)).is_err() {
+                                        break;
+                                    }
+                                }
+                                KeyEventKind::Release => {
+                                    tracing::trace!("Key released (ignored): {:?}", key);
+                                }
+                                KeyEventKind::Repeat => {
+                                    tracing::trace!("Key repeat (ignored): {:?}", key);
+                                }
+                            }
                         }
+                        Ok(Event::Mouse(mouse)) => {
+                            tracing::trace!("Mouse event: {:?}", mouse);
+                            if tx.send(InputEvent::Mouse(mouse)).is_err() {
+                                break;
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }

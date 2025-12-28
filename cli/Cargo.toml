@@ -21,6 +21,7 @@ tracing-appender = { workspace = true}
 ratatui = { workspace = true}
 crossterm = { workspace = true}
 atty = { workspace = true}
+arboard = "3.4"
 
 [lints]
 workspace = true
