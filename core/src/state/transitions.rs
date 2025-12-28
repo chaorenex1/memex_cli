@@ -30,34 +30,34 @@ impl StateTransition {
         let is_valid = match (from, to) {
             // 从 Idle 可以转到初始化
             (RuntimePhase::Idle, RuntimePhase::Initializing) => true,
-            
+
             // 从初始化可以转到记忆检索
             (RuntimePhase::Initializing, RuntimePhase::MemorySearch) => true,
-            
+
             // 从记忆检索可以转到 Runner 启动
             (RuntimePhase::MemorySearch, RuntimePhase::RunnerStarting) => true,
-            
+
             // 从 Runner 启动可以转到运行中
             (RuntimePhase::RunnerStarting, RuntimePhase::RunnerRunning) => true,
-            
+
             // 从运行中可以转到处理工具事件
             (RuntimePhase::RunnerRunning, RuntimePhase::ProcessingToolEvents) => true,
-            
+
             // 从处理工具事件可以转到 Gatekeeper 评估
             (RuntimePhase::ProcessingToolEvents, RuntimePhase::GatekeeperEvaluating) => true,
-            
+
             // 从 Gatekeeper 可以转到记忆沉淀
             (RuntimePhase::GatekeeperEvaluating, RuntimePhase::MemoryPersisting) => true,
-            
+
             // 从记忆沉淀可以转到完成
             (RuntimePhase::MemoryPersisting, RuntimePhase::Completed) => true,
-            
+
             // 各阶段都可以转到 Completed 或 Failed
             (_, RuntimePhase::Completed) | (_, RuntimePhase::Failed) => true,
-            
+
             // 运行中的阶段可以互相转换（处理并发情况）
             (RuntimePhase::ProcessingToolEvents, RuntimePhase::RunnerRunning) => true,
-            
+
             // 其他转换都不合法
             _ => false,
         };
@@ -112,11 +112,7 @@ mod tests {
 
     #[test]
     fn test_valid_transitions() {
-        assert!(StateTransition::validate(
-            RuntimePhase::Idle,
-            RuntimePhase::Initializing
-        )
-        .is_ok());
+        assert!(StateTransition::validate(RuntimePhase::Idle, RuntimePhase::Initializing).is_ok());
 
         assert!(StateTransition::validate(
             RuntimePhase::RunnerRunning,
@@ -124,26 +120,19 @@ mod tests {
         )
         .is_ok());
 
-        assert!(StateTransition::validate(
-            RuntimePhase::MemoryPersisting,
-            RuntimePhase::Completed
-        )
-        .is_ok());
+        assert!(
+            StateTransition::validate(RuntimePhase::MemoryPersisting, RuntimePhase::Completed)
+                .is_ok()
+        );
     }
 
     #[test]
     fn test_invalid_transitions() {
-        assert!(StateTransition::validate(
-            RuntimePhase::Idle,
-            RuntimePhase::RunnerRunning
-        )
-        .is_err());
+        assert!(
+            StateTransition::validate(RuntimePhase::Idle, RuntimePhase::RunnerRunning).is_err()
+        );
 
-        assert!(StateTransition::validate(
-            RuntimePhase::Completed,
-            RuntimePhase::Idle
-        )
-        .is_err());
+        assert!(StateTransition::validate(RuntimePhase::Completed, RuntimePhase::Idle).is_err());
     }
 
     #[test]

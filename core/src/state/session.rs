@@ -65,7 +65,10 @@ impl SessionState {
         };
 
         // 如果完成或失败，设置完成时间
-        if matches!(self.status, SessionStatus::Completed | SessionStatus::Failed) {
+        if matches!(
+            self.status,
+            SessionStatus::Completed | SessionStatus::Failed
+        ) {
             self.completed_at = Some(Utc::now());
         }
     }
@@ -159,7 +162,7 @@ mod tests {
     #[test]
     fn test_session_transition() {
         let mut session = SessionState::new(None);
-        
+
         session.transition_to(RuntimePhase::RunnerRunning);
         assert_eq!(session.status, SessionStatus::Running);
         assert_eq!(session.runtime.phase, RuntimePhase::RunnerRunning);

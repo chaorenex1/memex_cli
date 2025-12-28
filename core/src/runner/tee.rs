@@ -10,6 +10,13 @@ use crate::util::RingBytes;
 #[derive(Debug)]
 pub struct LineTap {
     pub line: String,
+    pub stream: LineStream,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum LineStream {
+    Stdout,
+    Stderr,
 }
 
 pub fn pump_stdout<R>(
@@ -21,7 +28,15 @@ pub fn pump_stdout<R>(
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
-    pump(rd, tokio::io::stdout(), ring, "stdout", line_tx, silent)
+    pump(
+        rd,
+        tokio::io::stdout(),
+        ring,
+        "stdout",
+        line_tx,
+        silent,
+        LineStream::Stdout,
+    )
 }
 
 pub fn pump_stderr<R>(
@@ -33,7 +48,15 @@ pub fn pump_stderr<R>(
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
-    pump(rd, tokio::io::stderr(), ring, "stderr", line_tx, silent)
+    pump(
+        rd,
+        tokio::io::stderr(),
+        ring,
+        "stderr",
+        line_tx,
+        silent,
+        LineStream::Stderr,
+    )
 }
 
 fn pump<R, W>(
@@ -43,6 +66,7 @@ fn pump<R, W>(
     label: &'static str,
     line_tx: mpsc::Sender<LineTap>,
     silent: bool,
+    stream: LineStream,
 ) -> JoinHandle<Result<u64, RunnerError>>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
@@ -85,7 +109,7 @@ where
                 }
 
                 let line = String::from_utf8_lossy(&one).to_string();
-                let _ = line_tx.send(LineTap { line }).await;
+                let _ = line_tx.send(LineTap { line, stream }).await;
             }
         }
 

@@ -1,13 +1,15 @@
 use clap::Parser;
 mod app;
 mod commands;
+mod tui;
 use commands::cli;
 use memex_core::context::AppContext;
 use memex_core::error;
 use memex_core::replay;
 use memex_core::state::{StateEvent, StateManager};
 use std::sync::Arc;
-use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 static LOG_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> =
@@ -32,9 +34,15 @@ async fn real_main() -> Result<i32, error::CliError> {
         memex_core::config::load_default().map_err(|e| error::CliError::Config(e.to_string()))?;
     init_tracing(&cfg.logging).map_err(error::CliError::Command)?;
 
-    let state_manager = match std::env::var("MEMEX_ENABLE_STATE_MGMT") {
-        Ok(v) if v == "true" => Some(Arc::new(StateManager::new())),
-        _ => None,
+    let env_state_enabled = std::env::var("MEMEX_ENABLE_STATE_MGMT")
+        .ok()
+        .map(|v| v.eq_ignore_ascii_case("true"));
+    let state_enabled = env_state_enabled.unwrap_or(cfg.state_management.enabled);
+
+    let state_manager = if state_enabled {
+        Some(Arc::new(StateManager::new()))
+    } else {
+        None
     };
     if let Some(manager) = state_manager.as_ref() {
         let mut event_rx = manager.subscribe();
@@ -44,7 +52,11 @@ async fn real_main() -> Result<i32, error::CliError> {
                     StateEvent::SessionCreated { session_id, .. } => {
                         tracing::debug!("Session created: {}", session_id);
                     }
-                    StateEvent::SessionStateChanged { session_id, new_phase, .. } => {
+                    StateEvent::SessionStateChanged {
+                        session_id,
+                        new_phase,
+                        ..
+                    } => {
                         tracing::debug!("Session {} -> {:?}", session_id, new_phase);
                     }
                     StateEvent::SessionCompleted {
@@ -60,7 +72,9 @@ async fn real_main() -> Result<i32, error::CliError> {
                             duration_ms
                         );
                     }
-                    StateEvent::SessionFailed { session_id, error, .. } => {
+                    StateEvent::SessionFailed {
+                        session_id, error, ..
+                    } => {
                         tracing::error!("Session {} failed: {}", session_id, error);
                     }
                     _ => {}
@@ -127,9 +141,8 @@ async fn dispatch(
         }
         cli::Commands::Resume(resume_args) => {
             let recover_id = Some(resume_args.run_id.clone());
-            let exit =
-                app::run_app_with_config(args, Some(resume_args.run_args), recover_id, &ctx)
-                    .await?;
+            let exit = app::run_app_with_config(args, Some(resume_args.run_args), recover_id, &ctx)
+                .await?;
             Ok(exit)
         }
     }
@@ -166,14 +179,27 @@ fn init_tracing(logging: &memex_core::config::LoggingConfig) -> Result<(), Strin
         maybe_writer = Some(non_blocking);
     }
 
-    let builder = tracing_subscriber::fmt().with_env_filter(filter);
-
-    match (logging.console, maybe_writer) {
-        (true, Some(w)) => builder.with_writer(std::io::stderr.and(w)).init(),
-        (true, None) => builder.with_writer(std::io::stderr).init(),
-        (false, Some(w)) => builder.with_writer(w).init(),
-        (false, None) => return Err("logging disabled for both console and file".to_string()),
+    if !logging.console && maybe_writer.is_none() {
+        return Err("logging disabled for both console and file".to_string());
     }
+
+    let console_layer = logging.console.then(|| {
+        tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_ansi(atty::is(atty::Stream::Stderr))
+    });
+
+    let file_layer = maybe_writer.map(|w| {
+        tracing_subscriber::fmt::layer()
+            .with_writer(w)
+            .with_ansi(false)
+    });
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(console_layer)
+        .with(file_layer)
+        .init();
 
     Ok(())
 }

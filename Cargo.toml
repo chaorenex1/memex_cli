@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 members = [
     "core",
     "plugins",
@@ -26,6 +27,9 @@ toml = "0.8"
 futures = "^0.3"
 regex = "^1.10"
 uuid = { version = "1.8", features = ["v4"] }
+ratatui = "0.28"
+crossterm = "0.28"
+atty = "0.2"
 
 
 tokio-test = "^0.4"

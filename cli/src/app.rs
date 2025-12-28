@@ -14,9 +14,10 @@ use memex_core::memory::{
     merge_prompt, render_memory_context, CandidateDraft, CandidateExtractConfig, QASearchPayload,
 };
 use memex_core::runner::{run_session, RunOutcome, RunnerResult, RunnerStartArgs};
-use memex_core::state::types::{GatekeeperDecisionSnapshot, RuntimePhase};
+use memex_core::state::types::{GatekeeperDecisionSnapshot, RuntimePhase, StateEvent};
 use memex_core::state::StateManagerHandle;
 use memex_core::tool_event::{ToolEventLite, WrapperEvent};
+use tokio::sync::mpsc;
 
 use memex_plugins::factory;
 
@@ -63,23 +64,34 @@ pub async fn run_app_with_config(
         }
     }
 
-    let stream_format = run_args
+    let mut stream_format = run_args
         .as_ref()
-        .map(|ra| ra.stream_format.as_str())
-        .unwrap_or("text");
+        .map(|ra| ra.stream_format.clone())
+        .unwrap_or_else(|| "text".to_string());
+    let mut stream_enabled = run_args.as_ref().map(|ra| ra.stream).unwrap_or(false);
+    let force_tui = run_args.as_ref().map(|ra| ra.tui).unwrap_or(false);
 
-    let stream = factory::build_stream(stream_format);
+    if force_tui {
+        stream_enabled = true;
+        if stream_format != "text" {
+            stream_format = "text".to_string();
+        }
+    }
+
+    let stream = factory::build_stream(&stream_format);
     let stream_plan = stream.apply(&mut cfg);
-
-    let user_query = prompt_text
-        .clone()
-        .unwrap_or_else(|| args.codecli_args.join(" "));
-
-    let effective_task_level = match run_args.as_ref().map(|ra| ra.task_level) {
-        Some(TaskLevel::Auto) | None => infer_task_level(&user_query),
-        Some(lv) => lv,
-    };
-    tracing::info!(task_level = ?effective_task_level, "task level selected");
+    let mut should_use_tui = force_tui;
+    tracing::info!("TUI force enabled: {}", force_tui);
+    tracing::info!("TUI config enabled: {}", cfg.tui.enabled);
+    if !cfg.tui.enabled {
+        should_use_tui = false;
+    }
+    if should_use_tui {
+        if let Err(reason) = crate::tui::check_tui_support() {
+            tracing::debug!("TUI disabled: {}", reason);
+            should_use_tui = false;
+        }
+    }
 
     let events_out_tx = ctx.events_out();
 
@@ -91,6 +103,45 @@ pub async fn run_app_with_config(
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     tracing::debug!(run_id = %run_id, stream_format = %stream_format, "run initialized");
+
+    let mut tui_terminal = if should_use_tui {
+        Some(crate::tui::setup_terminal().map_err(RunnerError::Spawn)?)
+    } else {
+        None
+    };
+    let mut tui_app = if should_use_tui {
+        Some(crate::tui::TuiApp::new(cfg.tui.clone(), run_id.clone()))
+    } else {
+        None
+    };
+
+    // if should_use_tui && prompt_text.is_none() {
+    //     let term = tui_terminal.as_mut().unwrap();
+    //     let app = tui_app.as_mut().unwrap();
+    //     match crate::tui::prompt_in_tui(term, app).await {
+    //         Ok(text) => {
+    //             prompt_text = Some(text);
+    //             app.input_buffer.clear();
+    //             app.input_cursor = 0;
+    //             app.pending_qa = true;
+    //             app.qa_started_at = Some(std::time::Instant::now());
+    //         }
+    //         Err(err) => {
+    //             crate::tui::restore_terminal(term);
+    //             return Err(err);
+    //         }
+    //     }
+    // }
+
+    let user_query = prompt_text
+        .clone()
+        .unwrap_or_else(|| args.codecli_args.join(" "));
+
+    let effective_task_level = match run_args.as_ref().map(|ra| ra.task_level) {
+        Some(TaskLevel::Auto) | None => infer_task_level(&user_query),
+        Some(lv) => lv,
+    };
+    tracing::info!(task_level = ?effective_task_level, "task level selected");
 
     let mut state_handle: Option<StateManagerHandle> = None;
     let mut state_session_id: Option<String> = None;
@@ -155,6 +206,12 @@ pub async fn run_app_with_config(
     )
     .await;
 
+    if should_use_tui {
+        if let Some(app) = tui_app.as_mut() {
+            app.pending_qa = false;
+        }
+    }
+
     if let (Some(manager), Some(session_id)) = (&state_manager, state_session_id.as_deref()) {
         manager
             .update_session(session_id, |session| {
@@ -213,8 +270,8 @@ pub async fn run_app_with_config(
                 recover_run_id.clone(),
                 user_query.clone(),
                 ra.model.clone(),
-                ra.stream,
-                stream_format,
+                stream_enabled,
+                &stream_format,
             )
             .map_err(|e| RunnerError::Spawn(e.to_string()))?;
 
@@ -249,8 +306,7 @@ pub async fn run_app_with_config(
     let session = match runner.start_session(&session_args).await {
         Ok(session) => session,
         Err(e) => {
-            if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref())
-            {
+            if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
                 let _ = handle.fail(session_id, e.to_string()).await;
             }
             return Err(RunnerError::Spawn(e.to_string()));
@@ -264,24 +320,99 @@ pub async fn run_app_with_config(
             .map_err(|e| RunnerError::Spawn(e.to_string()))?;
     }
 
+    let silent = stream_plan.silent || should_use_tui;
+
     // Run Session (Core Logic)
-    let run_result = match run_session(
-        session,
-        &cfg.control,
-        policy,
-        args.capture_bytes,
-        events_out_tx.clone(),
-        &run_id,
-        stream_plan.silent,
-        state_manager.clone(),
-        state_session_id.clone(),
-    )
-    .await
-    {
+    let run_result = match if should_use_tui {
+        let (tui_tx, tui_rx) = mpsc::unbounded_channel();
+        let control = cfg.control.clone();
+        let run_id_clone = run_id.clone();
+        let state_manager_run = state_manager.clone();
+        let state_session_id_run = state_session_id.clone();
+        let state_session_id_tui = state_session_id.clone();
+        let tui_tx_state = tui_tx.clone();
+        if let Some(manager) = state_manager.as_ref() {
+            let mut state_rx = manager.subscribe();
+            tokio::spawn(async move {
+                let mut phase = RuntimePhase::Initializing;
+                let mut memory_hits = 0usize;
+                let mut tool_events = 0usize;
+                loop {
+                    match state_rx.recv().await {
+                        Ok(event) => {
+                            let Some(session_id) = event.session_id() else {
+                                continue;
+                            };
+                            if state_session_id_tui.as_deref() != Some(session_id) {
+                                continue;
+                            }
+                            match event {
+                                StateEvent::SessionStateChanged { new_phase, .. } => {
+                                    phase = new_phase;
+                                }
+                                StateEvent::ToolEventReceived { event_count, .. } => {
+                                    tool_events = tool_events.saturating_add(event_count);
+                                }
+                                StateEvent::MemoryHit { hit_count, .. } => {
+                                    memory_hits = hit_count;
+                                }
+                                _ => {}
+                            }
+                            let _ = tui_tx_state.send(memex_core::tui::TuiEvent::StateUpdate {
+                                phase,
+                                memory_hits,
+                                tool_events,
+                            });
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    }
+                }
+            });
+        }
+        let events_out_tx_run = events_out_tx.clone();
+        let run_task = tokio::spawn(async move {
+            run_session(
+                session,
+                &control,
+                policy,
+                args.capture_bytes,
+                events_out_tx_run,
+                Some(tui_tx),
+                &run_id_clone,
+                silent,
+                state_manager_run,
+                state_session_id_run,
+            )
+            .await
+        });
+        let term = tui_terminal
+            .as_mut()
+            .ok_or_else(|| RunnerError::Spawn("TUI terminal not initialized".to_string()))?;
+        let app = tui_app
+            .as_mut()
+            .ok_or_else(|| RunnerError::Spawn("TUI app not initialized".to_string()))?;
+        let result = crate::tui::run_with_tui_on_terminal(term, app, tui_rx, run_task).await;
+        crate::tui::restore_terminal(term);
+        result
+    } else {
+        run_session(
+            session,
+            &cfg.control,
+            policy,
+            args.capture_bytes,
+            events_out_tx.clone(),
+            None,
+            &run_id,
+            silent,
+            state_manager.clone(),
+            state_session_id.clone(),
+        )
+        .await
+    } {
         Ok(r) => r,
         Err(e) => {
-            if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref())
-            {
+            if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
                 let _ = handle.fail(session_id, e.to_string()).await;
             }
             // Best-effort: still emit buffered wrapper events so the run has a trace,
@@ -324,11 +455,7 @@ pub async fn run_app_with_config(
         let signals = decision
             .signals
             .as_object()
-            .map(|map| {
-                map.iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect()
-            })
+            .map(|map| map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
             .unwrap_or_default();
         manager
             .update_session(session_id, |session| {
@@ -597,7 +724,7 @@ fn parse_env_value(value: &str, line_no: usize) -> Result<String, RunnerError> {
         let last = value.chars().last().unwrap();
         if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
             let inner = &value[1..value.len() - 1];
-            return Ok(unescape_env_value(inner, line_no)?);
+            return unescape_env_value(inner, line_no);
         }
     }
     Ok(value.to_string())

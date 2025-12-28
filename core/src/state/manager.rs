@@ -27,7 +27,7 @@ impl StateManager {
     /// 创建新的状态管理器
     pub fn new() -> Self {
         let (event_tx, _) = broadcast::channel(1000);
-        
+
         let inner = StateManagerInner {
             app_state: RwLock::new(AppState::default()),
             sessions: RwLock::new(HashMap::new()),
@@ -143,9 +143,7 @@ impl StateManager {
         F: FnOnce(&mut SessionState),
     {
         let mut sessions = self.inner.sessions.write().await;
-        let session = sessions
-            .get_mut(session_id)
-            .context("Session not found")?;
+        let session = sessions.get_mut(session_id).context("Session not found")?;
         f(session);
         Ok(())
     }
@@ -264,13 +262,13 @@ impl StateManager {
     /// 清理已完成的会话（可选保留最近 N 个）
     pub async fn cleanup_completed_sessions(&self, keep_recent: usize) -> Result<usize> {
         let mut sessions = self.inner.sessions.write().await;
-        
+
         let mut completed: Vec<_> = sessions
             .iter()
             .filter(|(_, s)| s.is_completed())
             .map(|(id, s)| (id.clone(), s.completed_at.unwrap()))
             .collect();
-        
+
         completed.sort_by(|a, b| b.1.cmp(&a.1));
 
         let to_remove: Vec<_> = completed
@@ -313,7 +311,9 @@ impl StateManagerHandle {
 
     /// 转换阶段
     pub async fn transition_phase(&self, session_id: &str, phase: RuntimePhase) -> Result<()> {
-        self.manager.transition_session_phase(session_id, phase).await
+        self.manager
+            .transition_session_phase(session_id, phase)
+            .await
     }
 
     /// 完成会话
@@ -352,13 +352,19 @@ mod tests {
     #[tokio::test]
     async fn test_session_lifecycle() {
         let manager = StateManager::new();
-        
+
         // 创建会话
-        let session_id = manager.create_session(Some("test-run".to_string())).await.unwrap();
+        let session_id = manager
+            .create_session(Some("test-run".to_string()))
+            .await
+            .unwrap();
         assert_eq!(manager.get_app_state().await.active_sessions, 1);
 
         // 转换阶段
-        manager.transition_session_phase(&session_id, RuntimePhase::RunnerRunning).await.unwrap();
+        manager
+            .transition_session_phase(&session_id, RuntimePhase::RunnerRunning)
+            .await
+            .unwrap();
         let session = manager.get_session(&session_id).await.unwrap();
         assert_eq!(session.runtime.phase, RuntimePhase::RunnerRunning);
 

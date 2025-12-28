@@ -66,6 +66,10 @@ pub struct RunArgs {
     #[arg(long, default_value = "text")]
     pub stream_format: String,
 
+    /// Force TUI mode (implies --stream and --stream-format=text).
+    #[arg(long, default_value_t = false)]
+    pub tui: bool,
+
     /// Extra environment variables to pass to the backend process (KEY=VALUE).
     /// Can be specified multiple times.
     #[arg(long = "env", action = clap::ArgAction::Append)]

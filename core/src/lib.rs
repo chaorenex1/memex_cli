@@ -1,6 +1,6 @@
 pub mod backend;
-pub mod context;
 pub mod config;
+pub mod context;
 pub mod error;
 pub mod events_out;
 pub mod gatekeeper;
@@ -10,4 +10,5 @@ pub mod runner;
 pub mod state;
 pub mod stream;
 pub mod tool_event;
+pub mod tui;
 pub mod util;

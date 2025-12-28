@@ -3,8 +3,8 @@
 //! 演示如何在 memex-cli 中集成和使用状态管理
 
 use anyhow::Result;
-use memex_core::state::{StateEvent, StateManager};
 use memex_core::state::types::RuntimePhase;
+use memex_core::state::{StateEvent, StateManager};
 
 /// 示例：完整的会话生命周期
 #[tokio::main]
@@ -37,7 +37,10 @@ async fn main() -> Result<()> {
                     event_count,
                     ..
                 } => {
-                    println!("🔧 Session {} received {} tool events", session_id, event_count);
+                    println!(
+                        "🔧 Session {} received {} tool events",
+                        session_id, event_count
+                    );
                 }
                 StateEvent::MemoryHit {
                     session_id,
@@ -57,7 +60,9 @@ async fn main() -> Result<()> {
                         session_id, exit_code, duration_ms
                     );
                 }
-                StateEvent::SessionFailed { session_id, error, .. } => {
+                StateEvent::SessionFailed {
+                    session_id, error, ..
+                } => {
                     println!("✗ Session {} failed: {}", session_id, error);
                 }
                 _ => {}
@@ -170,26 +175,14 @@ async fn main() -> Result<()> {
 
     println!("\n📊 Final Statistics:");
     let app_state = manager.get_app_state().await;
-    println!(
-        "   Active sessions: {}",
-        app_state.active_sessions
-    );
-    println!(
-        "   Completed sessions: {}",
-        app_state.completed_sessions
-    );
+    println!("   Active sessions: {}", app_state.active_sessions);
+    println!("   Completed sessions: {}", app_state.completed_sessions);
 
     let session = manager.get_session(&session_id).await?;
     println!("\n📈 Session Details:");
     println!("   Session ID: {}", session.session_id);
-    println!(
-        "   Duration: {}ms",
-        session.duration_ms()
-    );
-    println!(
-        "   Tool events: {}",
-        session.runtime.tool_events_count
-    );
+    println!("   Duration: {}ms", session.duration_ms());
+    println!("   Tool events: {}", session.runtime.tool_events_count);
     println!("   Memory hits: {}", session.runtime.memory_hits);
     println!("   Final phase: {:?}", session.runtime.phase);
 

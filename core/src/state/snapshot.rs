@@ -26,10 +26,7 @@ pub struct StateSnapshot {
 
 impl StateSnapshot {
     /// 创建新快照
-    pub fn new(
-        app_state: AppState,
-        sessions: HashMap<String, SessionState>,
-    ) -> Self {
+    pub fn new(app_state: AppState, sessions: HashMap<String, SessionState>) -> Self {
         Self {
             snapshot_id: uuid::Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
@@ -76,11 +73,12 @@ impl SnapshotManager {
     /// 创建快照管理器
     pub fn new<P: Into<PathBuf>>(snapshot_dir: P, max_snapshots: usize) -> Result<Self> {
         let snapshot_dir = snapshot_dir.into();
-        
+
         // 确保目录存在
         if !snapshot_dir.exists() {
-            fs::create_dir_all(&snapshot_dir)
-                .with_context(|| format!("Failed to create snapshot directory: {:?}", snapshot_dir))?;
+            fs::create_dir_all(&snapshot_dir).with_context(|| {
+                format!("Failed to create snapshot directory: {:?}", snapshot_dir)
+            })?;
         }
 
         Ok(Self {
@@ -93,19 +91,19 @@ impl SnapshotManager {
     pub fn save_snapshot(&self, snapshot: &StateSnapshot) -> Result<PathBuf> {
         let filename = format!("snapshot_{}.json", snapshot.snapshot_id);
         let path = self.snapshot_dir.join(filename);
-        
+
         snapshot.save_to_file(&path)?;
-        
+
         // 清理旧快照
         self.cleanup_old_snapshots()?;
-        
+
         Ok(path)
     }
 
     /// 加载最新快照
     pub fn load_latest_snapshot(&self) -> Result<Option<StateSnapshot>> {
         let snapshots = self.list_snapshots()?;
-        
+
         if snapshots.is_empty() {
             return Ok(None);
         }
@@ -129,7 +127,7 @@ impl SnapshotManager {
         for entry in fs::read_dir(&self.snapshot_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
                     if filename.starts_with("snapshot_") {
@@ -152,7 +150,7 @@ impl SnapshotManager {
     /// 清理旧快照
     fn cleanup_old_snapshots(&self) -> Result<()> {
         let snapshots = self.list_snapshots()?;
-        
+
         if snapshots.len() > self.max_snapshots {
             for path in snapshots.iter().skip(self.max_snapshots) {
                 fs::remove_file(path)
@@ -167,7 +165,7 @@ impl SnapshotManager {
     pub fn clear_snapshots(&self) -> Result<usize> {
         let snapshots = self.list_snapshots()?;
         let count = snapshots.len();
-        
+
         for path in snapshots {
             fs::remove_file(&path)
                 .with_context(|| format!("Failed to remove snapshot: {:?}", path))?;
@@ -184,10 +182,7 @@ mod tests {
 
     #[test]
     fn test_snapshot_serialization() {
-        let snapshot = StateSnapshot::new(
-            AppState::default(),
-            HashMap::new(),
-        );
+        let snapshot = StateSnapshot::new(AppState::default(), HashMap::new());
 
         let json = snapshot.to_json().unwrap();
         let restored = StateSnapshot::from_json(&json).unwrap();
@@ -201,10 +196,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let manager = SnapshotManager::new(temp_dir.path(), 5).unwrap();
 
-        let snapshot = StateSnapshot::new(
-            AppState::default(),
-            HashMap::new(),
-        );
+        let snapshot = StateSnapshot::new(AppState::default(), HashMap::new());
 
         let path = manager.save_snapshot(&snapshot).unwrap();
         assert!(path.exists());
@@ -223,10 +215,7 @@ mod tests {
 
         // 创建 5 个快照
         for _ in 0..5 {
-            let snapshot = StateSnapshot::new(
-                AppState::default(),
-                HashMap::new(),
-            );
+            let snapshot = StateSnapshot::new(AppState::default(), HashMap::new());
             manager.save_snapshot(&snapshot).unwrap();
             std::thread::sleep(std::time::Duration::from_millis(10));
         }

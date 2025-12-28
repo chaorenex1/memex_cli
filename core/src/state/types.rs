@@ -98,7 +98,7 @@ pub struct GatekeeperDecisionSnapshot {
 }
 
 /// 运行时性能指标
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RuntimeMetrics {
     /// 启动耗时（毫秒）
     pub startup_duration_ms: Option<u64>,
@@ -112,25 +112,11 @@ pub struct RuntimeMetrics {
     pub events_per_second: Option<f64>,
 }
 
-impl Default for RuntimeMetrics {
-    fn default() -> Self {
-        Self {
-            startup_duration_ms: None,
-            memory_search_duration_ms: None,
-            runner_duration_ms: None,
-            total_duration_ms: None,
-            events_per_second: None,
-        }
-    }
-}
-
 /// 状态事件
 #[derive(Debug, Clone, Serialize)]
 pub enum StateEvent {
     /// 应用启动
-    AppStarted {
-        timestamp: DateTime<Utc>,
-    },
+    AppStarted { timestamp: DateTime<Utc> },
     /// 会话创建
     SessionCreated {
         session_id: String,
@@ -175,9 +161,7 @@ pub enum StateEvent {
         timestamp: DateTime<Utc>,
     },
     /// 应用关闭
-    AppShutdown {
-        timestamp: DateTime<Utc>,
-    },
+    AppShutdown { timestamp: DateTime<Utc> },
 }
 
 impl StateEvent {

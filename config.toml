@@ -1,3 +1,6 @@
+[state_management]
+enabled = true
+
 [control]
 fail_mode = "closed"
 decision_timeout_ms = 300000
@@ -76,3 +79,13 @@ enabled = false
 path = "./run.events.jsonl"
 channel_capacity = 2048
 drop_when_full = true
+
+[tui]
+enabled = true
+auto_scroll = true
+show_splash = true
+splash_duration_ms = 1500
+splash_animation = true
+update_interval_ms = 50
+max_tool_events = 1000
+max_output_lines = 10000

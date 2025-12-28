@@ -31,3 +31,6 @@ tracing-subscriber = { workspace = true}
 [[example]]
 name = "state_management"
 path = "examples/state_management.rs"
+
+[lints]
+workspace = true

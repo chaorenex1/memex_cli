@@ -36,7 +36,6 @@ impl RunnerPlugin for CodeCliRunnerPlugin {
         // Windows: 防止弹出控制台窗口
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             cmd.creation_flags(CREATE_NO_WINDOW);
         }

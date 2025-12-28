@@ -14,10 +14,10 @@ pub fn load_default() -> anyhow::Result<AppConfig> {
     // Priority 1: ~/.memex/config.toml (highest)
     let memex_dir = get_memex_data_dir()?;
     let memex_config = memex_dir.join("config.toml");
-    
+
     // Priority 2: ./config.toml (current directory)
     let local_config = Path::new("config.toml");
-    
+
     let mut cfg: AppConfig = if memex_config.exists() {
         let s = std::fs::read_to_string(&memex_config)?;
         toml::from_str::<AppConfig>(&s)?
@@ -32,13 +32,21 @@ pub fn load_default() -> anyhow::Result<AppConfig> {
     if cfg.events_out.path == "./run.events.jsonl" {
         let events_dir = memex_dir.join("events_out");
         std::fs::create_dir_all(&events_dir)?;
-        cfg.events_out.path = events_dir.join("run.events.jsonl")
+        cfg.events_out.path = events_dir
+            .join("run.events.jsonl")
             .to_string_lossy()
             .to_string();
     }
 
     // Update logging directory to use memex data directory if not set
-    if cfg.logging.directory.is_none() || cfg.logging.directory.as_ref().map(|s| s.trim().is_empty()).unwrap_or(false) {
+    if cfg.logging.directory.is_none()
+        || cfg
+            .logging
+            .directory
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(false)
+    {
         let logs_dir = memex_dir.join("logs");
         std::fs::create_dir_all(&logs_dir)?;
         cfg.logging.directory = Some(logs_dir.to_string_lossy().to_string());

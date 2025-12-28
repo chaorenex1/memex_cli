@@ -12,18 +12,22 @@ use crate::events_out::EventsOutTx;
 use crate::state::types::RuntimePhase;
 use crate::state::StateManager;
 use crate::tool_event::{CompositeToolEventParser, ToolEventRuntime, TOOL_EVENT_PREFIX};
+use crate::tui::TuiEvent;
 use crate::util::RingBytes;
 
 use super::tee;
+use super::tee::LineStream;
 use super::traits::{PolicyPlugin, RunnerSession};
 use super::types::{PolicyAction, RunnerResult, Signal};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_session(
     mut session: Box<dyn RunnerSession>,
     control: &ControlConfig,
     policy: Option<Box<dyn PolicyPlugin>>,
     capture_bytes: usize,
     events_out: Option<EventsOutTx>,
+    tui_tx: Option<mpsc::UnboundedSender<TuiEvent>>,
     run_id: &str,
     silent: bool,
     state_manager: Option<Arc<StateManager>>,
@@ -110,7 +114,19 @@ pub async fn run_session(
 
                 tap = line_rx.recv() => {
                     if let Some(tap) = tap {
-                        if let Some(ev) = tool_runtime.observe_line(&tap.line).await {
+                        if let Some(tx) = &tui_tx {
+                            match tap.stream {
+                                LineStream::Stdout => {
+                                    let _ = tx.send(TuiEvent::RawStdout(tap.line.clone()));
+                                }
+                                LineStream::Stderr => {
+                                    let _ = tx.send(TuiEvent::RawStderr(tap.line.clone()));
+                                }
+                            }
+                        }
+
+                        let tool_event = tool_runtime.observe_line(&tap.line).await;
+                        if let Some(ev) = tool_event {
                             if let (Some(manager), Some(session_id)) = (&state_manager, &session_id)
                             {
                                 if !tool_events_started {
@@ -138,6 +154,9 @@ pub async fn run_session(
                                     manager.emit_tool_event_received(&session_id, 1).await;
                                 });
                             }
+                            if let Some(tx) = &tui_tx {
+                                let _ = tx.send(TuiEvent::ToolEvent(Box::new(ev.clone())));
+                            }
                             if ev.event_type == "tool.request" {
                                 if let Some(p) = &policy {
                                     match p.check(&ev).await {
@@ -154,6 +173,10 @@ pub async fn run_session(
                                         PolicyAction::Allow => {}
                                     }
                                 }
+                            }
+                        } else if matches!(tap.stream, LineStream::Stdout) {
+                            if let Some(tx) = &tui_tx {
+                                let _ = tx.send(TuiEvent::AssistantOutput(tap.line.clone()));
                             }
                         }
                     }
@@ -191,6 +214,10 @@ pub async fn run_session(
             &reason,
         )
         .await;
+        if let Some(tx) = &tui_tx {
+            let _ = tx.send(TuiEvent::Error(reason.clone()));
+            let _ = tx.send(TuiEvent::RunComplete { exit_code: 40 });
+        }
         return Ok(RunnerResult {
             run_id: effective_run_id.to_string(),
             exit_code: 40,
@@ -232,6 +259,10 @@ pub async fn run_session(
                 });
             })
             .await;
+    }
+
+    if let Some(tx) = &tui_tx {
+        let _ = tx.send(TuiEvent::RunComplete { exit_code });
     }
 
     Ok(RunnerResult {
