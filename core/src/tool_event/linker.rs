@@ -49,7 +49,7 @@ fn summarize_args(args: &Value, args_keys_max: usize, value_max_chars: usize) ->
             }
         }
         let args_keys_max = args_keys_max.max(1);
-        let keys: Vec<String> = o.keys().cloned().take(args_keys_max).collect();
+        let keys: Vec<String> = o.keys().take(args_keys_max).cloned().collect();
         return format!("keys=[{}]", keys.join(","));
     }
     "non-object args".to_string()

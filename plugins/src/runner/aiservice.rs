@@ -15,6 +15,12 @@ impl AiServiceRunnerPlugin {
     }
 }
 
+impl Default for AiServiceRunnerPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl RunnerPlugin for AiServiceRunnerPlugin {
     fn name(&self) -> &str {
@@ -24,7 +30,7 @@ impl RunnerPlugin for AiServiceRunnerPlugin {
     async fn start_session(&self, args: &RunnerStartArgs) -> Result<Box<dyn RunnerSession>> {
         // For AiService, RunnerStartArgs.cmd is the endpoint URL.
         let url = args.cmd.clone();
-        let prompt = args.args.get(0).cloned().unwrap_or_default();
+        let prompt = args.args.first().cloned().unwrap_or_default();
         let model = args.envs.get("MEMEX_MODEL").cloned();
         let stream = args
             .envs

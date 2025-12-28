@@ -20,9 +20,7 @@ impl PolicyPlugin for ConfigPolicyPlugin {
     }
 
     async fn check(&self, event: &ToolEvent) -> PolicyAction {
-        let inner_cfg = match &self.config.provider {
-            PolicyProvider::Config(c) => c,
-        };
+        let PolicyProvider::Config(inner_cfg) = &self.config.provider;
 
         let tool_name = event.tool.as_deref().unwrap_or("unknown");
         let action_name = event.action.as_deref();

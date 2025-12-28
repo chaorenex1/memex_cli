@@ -41,11 +41,9 @@ impl Gatekeeper {
                 continue;
             }
 
-            if cfg.exclude_stale_by_default {
-                if is_stale(m, now) {
-                    stale_count += 1;
-                    continue;
-                }
+            if cfg.exclude_stale_by_default && is_stale(m, now) {
+                stale_count += 1;
+                continue;
             }
 
             let cf = extract_i32(&m.metadata, "consecutive_fail").unwrap_or(0);

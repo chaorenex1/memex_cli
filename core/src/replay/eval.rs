@@ -80,12 +80,12 @@ fn build_run_outcome_from_exit(run: &ReplayRun) -> RunOutcome {
             out.shown_qa_ids = d
                 .get("shown_qa_ids")
                 .and_then(|v| v.as_array())
-                .map(arr_str)
+                .map(|a| arr_str(a))
                 .unwrap_or_default();
             out.used_qa_ids = d
                 .get("used_qa_ids")
                 .and_then(|v| v.as_array())
-                .map(arr_str)
+                .map(|a| arr_str(a))
                 .unwrap_or_default();
         }
     }
@@ -93,7 +93,7 @@ fn build_run_outcome_from_exit(run: &ReplayRun) -> RunOutcome {
     out
 }
 
-fn arr_str(a: &Vec<serde_json::Value>) -> Vec<String> {
+fn arr_str(a: &[serde_json::Value]) -> Vec<String> {
     a.iter()
         .filter_map(|x| x.as_str().map(|s| s.to_string()))
         .collect()

@@ -13,6 +13,12 @@ impl CodeCliRunnerPlugin {
     }
 }
 
+impl Default for CodeCliRunnerPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl RunnerPlugin for CodeCliRunnerPlugin {
     fn name(&self) -> &str {

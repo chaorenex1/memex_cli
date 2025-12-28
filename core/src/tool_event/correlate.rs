@@ -133,13 +133,13 @@ fn slim_pair(id: &str, req: &ToolEvent, res: &ToolEvent) -> Value {
         "res_ts": res.ts,
         "ok": res.ok,
         "req_args_keys": args_keys(&req.args),
-        "res_output_keys": res.output.as_ref().and_then(|v| v.as_object().map(|o| o.keys().cloned().take(32).collect::<Vec<_>>())),
+        "res_output_keys": res.output.as_ref().and_then(|v| v.as_object().map(|o| o.keys().take(32).cloned().collect::<Vec<_>>())),
     })
 }
 
 fn args_keys(v: &Value) -> Vec<String> {
     match v.as_object() {
-        Some(map) => map.keys().cloned().take(32).collect(),
+        Some(map) => map.keys().take(32).cloned().collect(),
         None => vec![],
     }
 }

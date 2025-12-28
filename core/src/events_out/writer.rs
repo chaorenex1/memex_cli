@@ -22,10 +22,8 @@ impl EventsOutTx {
                 self.dropped
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
-        } else {
-            if self.tx.send(line).await.is_err() {
-                // writer closed
-            }
+        } else if self.tx.send(line).await.is_err() {
+            // writer closed
         }
     }
 }

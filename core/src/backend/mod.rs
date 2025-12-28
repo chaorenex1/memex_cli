@@ -12,6 +12,7 @@ pub struct BackendPlan {
 pub trait BackendStrategy: Send + Sync {
     fn name(&self) -> &str;
 
+    #[allow(clippy::too_many_arguments)]
     fn plan(
         &self,
         backend: &str,

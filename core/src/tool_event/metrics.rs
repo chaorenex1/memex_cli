@@ -71,7 +71,7 @@ fn slim_event(e: &ToolEvent) -> Value {
 
 fn args_keys(v: &Value) -> Vec<String> {
     match v.as_object() {
-        Some(map) => map.keys().cloned().take(32).collect(),
+        Some(map) => map.keys().take(32).cloned().collect(),
         None => vec![],
     }
 }

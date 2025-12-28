@@ -421,7 +421,7 @@ async fn build_merged_prompt(
     let decision =
         Gatekeeper::evaluate(gk_cfg, Utc::now(), &matches, &run_outcome, &run_outcome.tool_events);
 
-    let memory_ctx = render_memory_context(&decision.inject_list, &inject_cfg);
+    let memory_ctx = render_memory_context(&decision.inject_list, inject_cfg);
     let merged = merge_prompt(user_query, &memory_ctx);
     let shown = decision.inject_list.iter().map(|x| x.qa_id.clone()).collect();
 
