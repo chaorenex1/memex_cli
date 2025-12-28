@@ -60,3 +60,9 @@ inherits = "release"
 opt-level = "z"
 panic = "abort"
 strip = true
+
+[workspace.lints.clippy]
+# Keep CI strict (-D warnings) but allow a couple of structural lints that are
+# acceptable for this codebase.
+too_many_arguments = "allow"
+module_inception = "allow"
