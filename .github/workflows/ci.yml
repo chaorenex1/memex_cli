@@ -27,6 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          toolchain: stable
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
