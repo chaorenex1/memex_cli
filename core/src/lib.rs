@@ -3,6 +3,7 @@ pub mod config;
 pub mod context;
 pub mod error;
 pub mod events_out;
+pub mod engine;
 pub mod gatekeeper;
 pub mod memory;
 pub mod replay;

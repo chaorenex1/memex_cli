@@ -1,21 +1,23 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use memex_core::config::TuiConfig;
+use memex_core::engine;
+use memex_core::engine::RunSessionInput;
 use memex_core::error::RunnerError;
 use memex_core::events_out::EventsOutTx;
 use memex_core::memory::MemoryPlugin;
-use memex_core::runner::{run_session, PolicyPlugin, RunnerResult};
+use memex_core::runner::{run_session, PolicyPlugin, RunnerResult, RunSessionArgs};
 use memex_core::state::types::{RuntimePhase, StateEvent};
 use memex_core::state::StateManager;
 use memex_core::runner::RunnerEvent;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
-use memex_plugins::factory;
 use uuid::Uuid;
 
 use crate::commands::cli::{Args, RunArgs};
-use crate::flow::flow_qa::run_with_query;
+use crate::flow::flow_qa::build_runner_spec;
 use crate::tui::{restore_terminal, setup_terminal, TuiApp};
 
 // Unified error handling for TUI
@@ -45,6 +47,77 @@ impl TuiRuntime {
     }
 }
 
+struct SharedPolicyPlugin(Arc<dyn PolicyPlugin>);
+
+#[async_trait]
+impl PolicyPlugin for SharedPolicyPlugin {
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+
+    async fn check(
+        &self,
+        event: &memex_core::tool_event::ToolEvent,
+    ) -> memex_core::runner::PolicyAction {
+        self.0.check(event).await
+    }
+}
+
+struct SharedMemoryPlugin(Arc<dyn MemoryPlugin>);
+
+#[async_trait]
+impl MemoryPlugin for SharedMemoryPlugin {
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+
+    async fn search(
+        &self,
+        payload: memex_core::memory::models::QASearchPayload,
+    ) -> anyhow::Result<Vec<memex_core::gatekeeper::SearchMatch>> {
+        self.0.search(payload).await
+    }
+
+    async fn record_hit(
+        &self,
+        payload: memex_core::memory::models::QAHitsPayload,
+    ) -> anyhow::Result<()> {
+        self.0.record_hit(payload).await
+    }
+
+    async fn record_candidate(
+        &self,
+        payload: memex_core::memory::models::QACandidatePayload,
+    ) -> anyhow::Result<()> {
+        self.0.record_candidate(payload).await
+    }
+
+    async fn record_validation(
+        &self,
+        payload: memex_core::memory::models::QAValidationPayload,
+    ) -> anyhow::Result<()> {
+        self.0.record_validation(payload).await
+    }
+}
+
+struct SharedGatekeeperPlugin(Arc<dyn memex_core::gatekeeper::GatekeeperPlugin>);
+
+impl memex_core::gatekeeper::GatekeeperPlugin for SharedGatekeeperPlugin {
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+
+    fn evaluate(
+        &self,
+        now: chrono::DateTime<chrono::Utc>,
+        matches: &[memex_core::gatekeeper::SearchMatch],
+        outcome: &memex_core::runner::RunOutcome,
+        events: &[memex_core::tool_event::ToolEvent],
+    ) -> memex_core::gatekeeper::GatekeeperDecision {
+        self.0.evaluate(now, matches, outcome, events)
+    }
+}
+
 pub async fn run_tui_flow(
     args: &Args,
     run_args: Option<&RunArgs>,
@@ -55,12 +128,16 @@ pub async fn run_tui_flow(
     _recover_run_id: Option<String>,
     stream_enabled: bool,
     stream_format: &str,
-    stream_silent: bool,
-    _policy: Option<Box<dyn PolicyPlugin>>,
-    _memory: Option<Box<dyn MemoryPlugin>>,
-    _gatekeeper: Box<dyn memex_core::gatekeeper::GatekeeperPlugin>,
+    _stream_silent: bool,
+    policy: Option<Box<dyn PolicyPlugin>>,
+    memory: Option<Box<dyn MemoryPlugin>>,
+    gatekeeper: Box<dyn memex_core::gatekeeper::GatekeeperPlugin>,
 ) -> Result<i32, RunnerError> {
     let mut tui = TuiRuntime::new(&cfg.tui, run_id.clone())?;
+    let shared_policy: Option<Arc<dyn PolicyPlugin>> = policy.map(Arc::from);
+    let shared_memory: Option<Arc<dyn MemoryPlugin>> = memory.map(Arc::from);
+    let shared_gatekeeper: Arc<dyn memex_core::gatekeeper::GatekeeperPlugin> =
+        Arc::from(gatekeeper);
     
     tracing::debug!("TUI: Starting interactive loop");
     
@@ -83,7 +160,7 @@ pub async fn run_tui_flow(
         // Initial render
         tui.app.maybe_hide_splash();
         let input_area = tui.terminal.get_frame().area();
-        if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &mut tui.app)) {
+        if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
             handle_tui_error(&mut tui.app, &format!("Initial render failed: {}", e), "WARN");
         }
 
@@ -123,7 +200,7 @@ pub async fn run_tui_flow(
                 _ = tick.tick() => {}
             }
 
-            if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &mut tui.app)) {
+            if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
                 handle_tui_error(&mut tui.app, &format!("Render error: {}", e), "WARN");
             }
         };
@@ -138,46 +215,44 @@ pub async fn run_tui_flow(
         tui.app.qa_started_at = Some(std::time::Instant::now());
 
         // Phase 3: Execute query with continuing event loop
-        let tui_ptr = &mut tui as *mut TuiRuntime;
-        
         // Generate a new run_id for each query
         let query_run_id = Uuid::new_v4().to_string();
         tui.app.run_id = query_run_id.clone();
         
-        // Rebuild plugins for each query
-        let query_memory = factory::build_memory(&cfg).map_err(|e| {
-            tracing::error!("Failed to build memory plugin: {}", e);
-            RunnerError::Spawn(e.to_string())
-        })?;
-        let query_policy = factory::build_policy(&cfg);
-        let query_gatekeeper = factory::build_gatekeeper(&cfg);
-        
-        let result = run_with_query(
-            user_input,
+        let query_policy = shared_policy.as_ref().map(|p| {
+            Box::new(SharedPolicyPlugin(p.clone())) as Box<dyn PolicyPlugin>
+        });
+        let query_memory = shared_memory.as_ref().map(|m| {
+            Box::new(SharedMemoryPlugin(m.clone())) as Box<dyn MemoryPlugin>
+        });
+        let query_gatekeeper = Box::new(SharedGatekeeperPlugin(shared_gatekeeper.clone()))
+            as Box<dyn memex_core::gatekeeper::GatekeeperPlugin>;
+
+        let (runner_spec, start_data) = build_runner_spec(
             args,
             run_args,
             cfg,
-            state_manager.clone(),
-            events_out_tx.clone(),
-            query_run_id,
-            None, // No recovery for subsequent queries
-            true,
+            None,
             stream_enabled,
             stream_format,
-            stream_silent,
-            query_policy,
-            query_memory,
-            query_gatekeeper,
-            Some(tui_ptr),
-            |input| async move {
-                run_tui_session_continuing(
-                    unsafe { &mut *tui_ptr },
-                    input,
-                    &mut input_rx,
-                    &mut tick,
-                )
-                .await
+        )?;
+         
+        let result = engine::run_with_query(
+            engine::RunWithQueryArgs {
+                user_query: user_input,
+                cfg: cfg.clone(),
+                runner: runner_spec,
+                run_id: query_run_id,
+                capture_bytes: args.capture_bytes,
+                silent: true,
+                events_out_tx: events_out_tx.clone(),
+                state_manager: state_manager.clone(),
+                policy: query_policy,
+                memory: query_memory,
+                gatekeeper: query_gatekeeper,
+                wrapper_start_data: start_data,
             },
+            |input| run_tui_session_continuing(&mut tui, input, &mut input_rx, &mut tick),
         )
         .await;
 
@@ -210,42 +285,39 @@ pub async fn run_tui_flow(
         loop {
             tokio::select! {
                 Some(event) = review_rx.recv() => {
-                    match event {
-                        InputEvent::Key(key) => {
-                            use crossterm::event::KeyCode;
-                            use crossterm::event::KeyModifiers;
-                            match key.code {
-                                // 'n' or Enter - start new query
-                                KeyCode::Char('n') | KeyCode::Enter => {
-                                    tracing::debug!("TUI: Starting new query");
-                                    break; // Break inner loop, continue main_loop
-                                }
-                                // 'q' or Ctrl+C - quit program
-                                KeyCode::Char('q') => {
-                                    tracing::debug!("TUI: User requested quit");
+                    if let InputEvent::Key(key) = event {
+                        use crossterm::event::KeyCode;
+                        use crossterm::event::KeyModifiers;
+                        match key.code {
+                            // 'n' or Enter - start new query
+                            KeyCode::Char('n') | KeyCode::Enter => {
+                                tracing::debug!("TUI: Starting new query");
+                                break; // Break inner loop, continue main_loop
+                            }
+                            // 'q' or Ctrl+C - quit program
+                            KeyCode::Char('q') => {
+                                tracing::debug!("TUI: User requested quit");
+                                break 'main_loop;
+                            }
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                tracing::debug!("TUI: User requested quit (Ctrl+C)");
+                                break 'main_loop;
+                            }
+                            // Allow navigation keys to review results
+                            _ => {
+                                if tui.app.handle_key(key) {
+                                    tracing::debug!("TUI: User requested quit via handle_key");
                                     break 'main_loop;
-                                }
-                                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                                    tracing::debug!("TUI: User requested quit (Ctrl+C)");
-                                    break 'main_loop;
-                                }
-                                // Allow navigation keys to review results
-                                _ => {
-                                    if tui.app.handle_key(key) {
-                                        tracing::debug!("TUI: User requested quit via handle_key");
-                                        break 'main_loop;
-                                    }
                                 }
                             }
                         }
-                        _ => {}
                     }
                 }
                 _ = review_tick.tick() => {}
             }
             
             tui.app.maybe_hide_splash();
-            if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &mut tui.app)) {
+            if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
                 tracing::warn!("Render error: {}", e);
             }
         }
@@ -264,13 +336,15 @@ pub async fn run_tui_flow(
 // Modified session runner that reuses the existing input reader
 async fn run_tui_session_continuing(
     tui: &mut TuiRuntime,
-    input: crate::flow::flow_qa::RunSessionInput,
+    input: RunSessionInput,
     input_rx: &mut mpsc::UnboundedReceiver<crate::tui::events::InputEvent>,
     tick: &mut tokio::time::Interval,
 ) -> Result<RunnerResult, RunnerError> {
     use crate::tui::ui;
     
     tracing::debug!("TUI session (continuing): Starting");
+    tui.app.pending_qa = false;
+    tui.app.qa_started_at = None;
     let (tui_tx, mut tui_rx) = mpsc::unbounded_channel();
 
     // Unified error handler for execution phase
@@ -326,18 +400,18 @@ async fn run_tui_session_continuing(
     let run_id = input.run_id.clone();
     let silent = input.silent;
     let mut run_task = tokio::spawn(async move {
-        run_session(
-            input.session,
-            &input.control,
-            input.policy,
-            input.capture_bytes,
-            events_out_tx_run,
-            Some(tui_tx),
-            &run_id,
+        run_session(RunSessionArgs {
+            session: input.session,
+            control: &input.control,
+            policy: input.policy,
+            capture_bytes: input.capture_bytes,
+            events_out: events_out_tx_run,
+            event_tx: Some(tui_tx),
+            run_id: &run_id,
             silent,
-            state_manager_run,
-            state_session_id_run,
-        )
+            state_manager: state_manager_run,
+            session_id: state_session_id_run,
+        })
         .await
     });
 
@@ -413,7 +487,7 @@ async fn run_tui_session_continuing(
         }
 
         tui.app.maybe_hide_splash();
-        if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &mut tui.app)) {
+        if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
             // Render errors are non-fatal, just log and continue
             tracing::warn!("Render error (non-fatal): {}", e);
             handle_tui_error(&mut tui.app, &format!("Render error: {}", e), "WARN");

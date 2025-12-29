@@ -1,13 +1,14 @@
 use memex_core::config::AppConfig;
+use memex_core::engine;
 use memex_core::error::RunnerError;
 use memex_core::events_out::EventsOutTx;
 use memex_core::memory::MemoryPlugin;
-use memex_core::runner::{run_session, PolicyPlugin};
+use memex_core::runner::{run_session, PolicyPlugin, RunSessionArgs};
 use memex_core::state::StateManager;
 use std::sync::Arc;
 
 use crate::commands::cli::{Args, RunArgs};
-use crate::flow::flow_qa::run_with_query;
+use crate::flow::flow_qa::build_runner_spec;
 
 pub async fn run_standard_flow(
     args: &Args,
@@ -25,36 +26,43 @@ pub async fn run_standard_flow(
     gatekeeper: Box<dyn memex_core::gatekeeper::GatekeeperPlugin>,
 ) -> Result<i32, RunnerError> {
     let user_query = resolve_user_query(args, run_args)?;
-    run_with_query(
-        user_query,
+    let (runner_spec, start_data) = build_runner_spec(
         args,
         run_args,
         cfg,
-        state_manager,
-        events_out_tx,
-        run_id,
-        recover_run_id,
-        false,
+        recover_run_id.clone(),
         stream_enabled,
         stream_format,
-        stream_silent,
-        policy,
-        memory,
-        gatekeeper,
-        None,
+    )?;
+
+    engine::run_with_query(
+        engine::RunWithQueryArgs {
+            user_query,
+            cfg: cfg.clone(),
+            runner: runner_spec,
+            run_id,
+            capture_bytes: args.capture_bytes,
+            silent: stream_silent,
+            events_out_tx,
+            state_manager,
+            policy,
+            memory,
+            gatekeeper,
+            wrapper_start_data: start_data,
+        },
         |input| async move {
-            run_session(
-                input.session,
-                &input.control,
-                input.policy,
-                input.capture_bytes,
-                input.events_out_tx,
-                None,
-                &input.run_id,
-                input.silent,
-                input.state_manager,
-                input.state_session_id,
-            )
+            run_session(RunSessionArgs {
+                session: input.session,
+                control: &input.control,
+                policy: input.policy,
+                capture_bytes: input.capture_bytes,
+                events_out: input.events_out_tx,
+                event_tx: None,
+                run_id: &input.run_id,
+                silent: input.silent,
+                state_manager: input.state_manager,
+                session_id: input.state_session_id,
+            })
             .await
         },
     )

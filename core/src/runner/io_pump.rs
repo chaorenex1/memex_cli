@@ -101,18 +101,53 @@ where
             line_buf.extend_from_slice(&buf[..n]);
             while let Some(pos) = line_buf.iter().position(|&b| b == b'\n') {
                 let mut one = line_buf.drain(..=pos).collect::<Vec<u8>>();
-                if one.last() == Some(&b'\n') {
-                    one.pop();
-                }
-                if one.last() == Some(&b'\r') {
-                    one.pop();
-                }
-
+                trim_newline(&mut one);
                 let line = String::from_utf8_lossy(&one).to_string();
+                let _ = line_tx.send(LineTap { line, stream }).await;
+            }
+        }
+
+        // EOF flush: deliver the last partial line if it doesn't end with '\n'.
+        if !line_buf.is_empty() {
+            trim_newline(&mut line_buf);
+            if !line_buf.is_empty() {
+                let line = String::from_utf8_lossy(&line_buf).to_string();
                 let _ = line_tx.send(LineTap { line, stream }).await;
             }
         }
 
         Ok(total)
     })
+}
+
+fn trim_newline(buf: &mut Vec<u8>) {
+    if buf.last() == Some(&b'\n') {
+        buf.pop();
+    }
+    if buf.last() == Some(&b'\r') {
+        buf.pop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn flushes_last_line_without_newline_on_eof() {
+        let (mut wr, rd) = tokio::io::duplex(1024);
+        let ring = RingBytes::new(1024);
+        let (tx, mut rx) = mpsc::channel::<LineTap>(8);
+
+        let task = pump_stdout(rd, ring, tx, true);
+
+        wr.write_all(b"hello").await.unwrap();
+        drop(wr);
+
+        let tap = rx.recv().await.expect("expected one line");
+        assert_eq!(tap.line, "hello");
+        assert!(matches!(tap.stream, LineStream::Stdout));
+
+        task.await.unwrap().unwrap();
+    }
 }
