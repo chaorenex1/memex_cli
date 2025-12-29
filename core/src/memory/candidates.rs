@@ -12,7 +12,23 @@ pub fn extract_candidates(
     stderr_tail: &str,
     tool_events: &[ToolEventLite],
 ) -> Vec<CandidateDraft> {
+    tracing::debug!(
+        target: "memex.qa",
+        stage = "candidate.extract.start",
+        max_candidates = cfg.max_candidates,
+        redact = cfg.redact,
+        strict_secret_block = cfg.strict_secret_block,
+        user_query_len = user_query.len(),
+        stdout_tail_len = stdout_tail.len(),
+        stderr_tail_len = stderr_tail.len(),
+        tool_events = tool_events.len()
+    );
     if cfg.max_candidates == 0 {
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "candidate.extract.skip",
+            reason = "max_candidates=0"
+        );
         return vec![];
     }
 
@@ -27,6 +43,11 @@ pub fn extract_candidates(
     }
 
     if cfg.strict_secret_block && contains_secret(&combined) {
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "candidate.extract.skip",
+            reason = "secret_detected"
+        );
         return vec![];
     }
 
@@ -96,6 +117,12 @@ pub fn extract_candidates(
     }
 
     if final_answer.chars().count() < cfg.min_answer_chars {
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "candidate.extract.skip",
+            reason = "answer_too_short",
+            min_answer_chars = cfg.min_answer_chars
+        );
         return vec![];
     }
 
@@ -117,7 +144,9 @@ pub fn extract_candidates(
         source: Some("mem-codecli".to_string()),
     };
 
-    vec![draft]
+    let out = vec![draft];
+    tracing::debug!(target: "memex.qa", stage = "candidate.extract.end", produced = out.len());
+    out
 }
 
 fn extract_tool_steps_from_lite(

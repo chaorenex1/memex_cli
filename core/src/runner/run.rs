@@ -20,7 +20,8 @@ pub struct RunSessionArgs<'a> {
     pub events_out: Option<EventsOutTx>,
     pub event_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,
     pub run_id: &'a str,
-    pub silent: bool,
+    pub backend_kind: &'a str,
+    pub stream_format: &'a str,
     pub abort_rx: Option<mpsc::Receiver<String>>,
 }
 
@@ -33,7 +34,8 @@ pub async fn run_session(args: RunSessionArgs<'_>) -> Result<RunnerResult, Runne
         events_out: args.events_out,
         event_tx: args.event_tx,
         run_id: args.run_id,
-        silent: args.silent,
+        backend_kind: args.backend_kind,
+        stream_format: args.stream_format,
         abort_rx: args.abort_rx,
     })
     .await

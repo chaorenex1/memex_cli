@@ -3,7 +3,7 @@ mod control;
 mod events;
 pub mod exit;
 mod io_pump;
-mod observe;
+mod output;
 mod policy;
 mod runtime;
 pub mod types;

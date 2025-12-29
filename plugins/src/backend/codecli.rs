@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::path::Path;
-
 use anyhow::Result;
 
 use memex_core::api as core_api;
@@ -21,25 +19,19 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         resume_id: Option<String>,
         prompt: String,
         model: Option<String>,
-        stream: bool,
         stream_format: &str,
     ) -> Result<core_api::BackendPlan> {
-        tracing::info!(
-            "Planning CodeCli backend '{}' with resume_id={:?}, model={:?}, stream={}, stream_format={},base_envs={:?}",
-            backend,
-            resume_id,
-            model,
-            stream,
-            stream_format,
-            base_envs
-        );
-
         let mut args: Vec<String> = Vec::new();
+        let envs = base_envs;
 
-        let exe = backend_basename_lower(backend);
-        let want_stream_json = stream_format == "jsonl";
+        // 解析可执行文件完整路径
+        let exe_path = resolve_executable_path(backend)?;
+        tracing::info!("Resolved executable path: {}", exe_path);
+        
+        // 提取命令类型用于判断参数格式（codex/claude/gemini）
+        let cmd_type = extract_command_type(backend);
 
-        if exe.contains("codex") {
+        if cmd_type.contains("codex") {
             // Matches examples like: codex exec "..." --json
             args.push("exec".to_string());
 
@@ -48,9 +40,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 args.push(m.clone());
             }
 
-            if want_stream_json {
-                args.push("--json".to_string());
-            }
+            args.push("--json".to_string());
 
             // Resume: codex exec [--json] resume <id> <prompt>
             if let Some(resume_id) = resume_id.as_deref() {
@@ -63,21 +53,19 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             if !prompt.is_empty() {
                 args.push(prompt);
             }
-        } else if exe.contains("claude") {
+        } else if cmd_type.contains("claude") {
             // Matches examples like:
             // claude "..." -p --output-format stream-json --verbose
             if !prompt.is_empty() {
                 args.push(prompt);
             }
 
-            if stream || want_stream_json {
-                args.push("-p".to_string());
-            }
+            // Always use non-interactive output mode for the wrapper.
+            args.push("-p".to_string());
 
-            if want_stream_json {
-                args.push("--output-format".to_string());
-                args.push("stream-json".to_string());
-            }
+            args.push("--output-format".to_string());
+            args.push("stream-json".to_string());
+            args.push("--verbose".to_string());
 
             if let Some(m) = &model {
                 args.push("--model".to_string());
@@ -91,7 +79,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                     args.push(resume_id.to_string());
                 }
             }
-        } else if exe.contains("gemini") {
+        } else if cmd_type.contains("gemini") {
             // Matches examples like:
             // gemini -p "..." -y -o stream-json
             if !prompt.is_empty() {
@@ -99,10 +87,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 args.push(prompt);
             }
 
-            if want_stream_json {
-                args.push("-o".to_string());
-                args.push("stream-json".to_string());
-            }
+            args.push("-o".to_string());
+            args.push("stream-json".to_string());
 
             // Resume: -r <id> (e.g. -r latest)
             if let Some(resume_id) = resume_id.as_deref() {
@@ -123,9 +109,6 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 args.push("--model".to_string());
                 args.push(m);
             }
-            if stream {
-                args.push("--stream".to_string());
-            }
             if !prompt.is_empty() {
                 args.push(prompt);
             }
@@ -134,16 +117,230 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         Ok(core_api::BackendPlan {
             runner: Box::new(CodeCliRunnerPlugin::new()),
             session_args: core_api::RunnerStartArgs {
-                cmd: backend.to_string(),
+                cmd: exe_path,
                 args,
-                envs: base_envs,
+                envs,
             },
         })
     }
 }
 
-fn backend_basename_lower(backend: &str) -> String {
-    let p = Path::new(backend);
-    let s = p.file_stem().and_then(|x| x.to_str()).unwrap_or(backend);
-    s.to_ascii_lowercase()
+/// 解析可执行文件的完整路径
+/// 
+/// 优先级：
+/// 1. 如果是绝对路径且存在，直接使用
+/// 2. 从 npm 全局工具目录查找（支持 nvm/nvm-windows）
+/// 3. 在系统 PATH 中查找
+/// 4. 失败时返回错误
+fn resolve_executable_path(backend: &str) -> Result<String> {
+    use std::path::Path;
+    
+    let backend_path = Path::new(backend);
+    
+    // 1. 如果是绝对路径且存在，直接使用
+    if backend_path.is_absolute() && backend_path.exists() {
+        tracing::debug!("Using absolute path: {}", backend);
+        return Ok(backend.to_string());
+    }
+    
+    // 2. 提取命令名（去掉扩展名）
+    let cmd_name = backend_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(backend);
+    
+    // 3. 从 npm 全局工具中查找
+    match find_in_npm_global(cmd_name) {
+        Ok(path) => {
+            tracing::info!("Found in npm global: {} -> {}", cmd_name, path);
+            return Ok(path);
+        }
+        Err(e) => {
+            tracing::debug!("npm global search failed: {}", e);
+        }
+    }
+    
+    // 4. 在系统 PATH 中查找
+    match find_in_system_path(cmd_name) {
+        Some(path) => {
+            tracing::info!("Found in system PATH: {} -> {}", cmd_name, path);
+            return Ok(path);
+        }
+        None => {
+            tracing::debug!("Not found in system PATH: {}", cmd_name);
+        }
+    }
+    
+    // 5. 都找不到时返回错误
+    Err(anyhow::anyhow!(
+        "Executable '{}' not found. Please ensure it's installed (e.g., npm install -g {}) \
+        or provide the full path.",
+        cmd_name, cmd_name
+    ))
 }
+
+/// 提取命令类型（用于判断参数格式）
+fn extract_command_type(backend: &str) -> String {
+    use std::path::Path;
+    
+    Path::new(backend)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(backend)
+        .to_lowercase()
+}
+
+/// 在 npm 全局目录中查找命令（仅二进制可执行文件）
+fn find_in_npm_global(cmd: &str) -> Result<String> {
+    // 获取 npm 全局 bin 目录
+    let npm_bin = get_npm_global_bin()?;
+    
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: 只查找 .exe 二进制文件
+        let mut path = npm_bin.clone();
+        path.push(format!("{}.cmd", cmd));
+        if path.is_file() {
+            return Ok(path.to_string_lossy().to_string());
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Unix: 查找没有扩展名的可执行文件
+        let mut path = npm_bin.clone();
+        path.push(cmd);
+        if path.is_file() && is_executable(&path) {
+            return Ok(path.to_string_lossy().to_string());
+        }
+    }
+    
+    Err(anyhow::anyhow!("Binary executable '{}' not found in npm global", cmd))
+}
+
+/// 在系统 PATH 中查找命令（仅二进制可执行文件）
+fn find_in_system_path(cmd: &str) -> Option<String> {
+    use std::env;
+    
+    let path_env = env::var_os("PATH")?;
+    
+    for dir in env::split_paths(&path_env) {
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: 只查找 .exe 文件
+            let candidate = dir.join(format!("{}.exe", cmd));
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+        
+        #[cfg(not(target_os = "windows"))]
+        {
+            // Unix: 查找没有扩展名的可执行文件
+            let candidate = dir.join(cmd);
+            if candidate.is_file() && is_executable(&candidate) {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    
+    None
+}
+
+/// 检查文件是否为可执行文件（Unix 平台需要检查权限）
+#[cfg(not(target_os = "windows"))]
+fn is_executable(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    
+    if let Ok(metadata) = std::fs::metadata(path) {
+        let permissions = metadata.permissions();
+        // 检查是否有任何执行权限位（用户/组/其他）
+        permissions.mode() & 0o111 != 0
+    } else {
+        false
+    }
+}
+
+/// 获取 npm 全局 bin 目录
+fn get_npm_global_bin() -> Result<std::path::PathBuf> {
+    use std::process::Command;
+    use std::env;
+    
+    // 策略1: 检查 NVM 环境变量（nvm-windows 和 nvm 都支持）
+    // NVM_BIN 指向当前激活版本的 bin 目录
+    if let Ok(nvm_bin) = env::var("NVM_BIN") {
+        let path = std::path::PathBuf::from(&nvm_bin);
+        if path.is_dir() {
+            tracing::info!("Using NVM_BIN: {}", path.display());
+            return Ok(path);
+        } else {
+            tracing::debug!("NVM_BIN exists but not a directory: {}", nvm_bin);
+        }
+    }
+    
+    // 策略2: 检查 NVM_SYMLINK (nvm-windows)
+    #[cfg(target_os = "windows")]
+    if let Ok(nvm_symlink) = env::var("NVM_SYMLINK") {
+        let path = std::path::PathBuf::from(&nvm_symlink);
+        if path.is_dir() {
+            tracing::info!("Using NVM_SYMLINK: {}", path.display());
+            return Ok(path);
+        }
+    }
+    
+    // 策略3: 调用 npm bin -g
+    let output = Command::new("npm")
+        .args(["bin", "-g"])
+        .output()
+        .or_else(|e| {
+            tracing::debug!("Failed to run 'npm': {}", e);
+            // Windows fallback
+            #[cfg(target_os = "windows")]
+            {
+                tracing::debug!("Trying 'npm.cmd' instead...");
+                Command::new("npm.cmd").args(["bin", "-g"]).output()
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err(e)
+            }
+        })
+        .map_err(|e| anyhow::anyhow!("Failed to execute npm: {}. Make sure npm is installed and in PATH.", e))?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(anyhow::anyhow!(
+            "npm bin -g failed with exit code {:?}\nstdout: {}\nstderr: {}",
+            output.status.code(),
+            stdout.trim(),
+            stderr.trim()
+        ));
+    }
+    
+    let path_str = String::from_utf8(output.stdout)
+        .map_err(|e| anyhow::anyhow!("Invalid UTF-8 in npm output: {}", e))?
+        .trim()
+        .to_string();
+    
+    if path_str.is_empty() {
+        return Err(anyhow::anyhow!("npm bin -g returned empty output"));
+    }
+    
+    let path = std::path::PathBuf::from(&path_str);
+    if !path.exists() {
+        return Err(anyhow::anyhow!(
+            "npm global bin directory does not exist: {}",
+            path_str
+        ));
+    }
+    
+    if !path.is_dir() {
+        return Err(anyhow::anyhow!(
+            "npm global bin path is not a directory: {}",
+            path_str
+        ));
+    }
+    
+    tracing::info!("npm global bin directory: {}", path.display());
+    Ok(path)}

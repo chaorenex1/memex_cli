@@ -9,7 +9,6 @@ use crate::memory::service::MemoryServicePlugin;
 use crate::policy::config_rules::ConfigPolicyPlugin;
 use crate::runner::codecli::CodeCliRunnerPlugin;
 use crate::runner::replay::ReplayRunnerPlugin;
-use crate::stream::{JsonlStreamStrategy, TextStreamStrategy};
 
 pub fn build_memory(cfg: &core_api::AppConfig) -> Result<Option<Arc<dyn core_api::MemoryPlugin>>> {
     if !cfg.memory.enabled {
@@ -47,14 +46,6 @@ pub fn build_gatekeeper(cfg: &core_api::AppConfig) -> Arc<dyn core_api::Gatekeep
         core_api::GatekeeperProvider::Standard(std_cfg) => {
             Arc::new(StandardGatekeeperPlugin::new(std_cfg.clone().into()))
         }
-    }
-}
-
-pub fn build_stream(stream_format: &str) -> Box<dyn core_api::StreamStrategy> {
-    match stream_format {
-        "jsonl" => Box::new(JsonlStreamStrategy),
-        // Preserve existing behavior: anything other than jsonl behaves like text.
-        _ => Box::new(TextStreamStrategy),
     }
 }
 

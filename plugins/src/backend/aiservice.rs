@@ -20,7 +20,6 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
         _resume_id: Option<String>,
         prompt: String,
         model: Option<String>,
-        stream: bool,
         stream_format: &str,
     ) -> Result<core_api::BackendPlan> {
         if !(backend.starts_with("http://") || backend.starts_with("https://")) {
@@ -34,10 +33,8 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
         if let Some(m) = &model {
             base_envs.insert("MEMEX_MODEL".to_string(), m.clone());
         }
-        base_envs.insert(
-            "MEMEX_STREAM".to_string(),
-            if stream { "1" } else { "0" }.to_string(),
-        );
+        // Wrapper always streams output; the format is controlled separately via stream_format.
+        base_envs.insert("MEMEX_STREAM".to_string(), "1".to_string());
         base_envs.insert("MEMEX_STREAM_FORMAT".to_string(), stream_format.to_string());
 
         Ok(core_api::BackendPlan {

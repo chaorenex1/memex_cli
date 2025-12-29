@@ -31,27 +31,96 @@ impl MemoryClient {
 
     pub async fn search(&self, payload: QASearchPayload) -> anyhow::Result<Value> {
         let url = format!("{}/v1/qa/search", self.base_url.trim_end_matches('/'));
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "memory.http.search.in",
+            url = %url,
+            project_id = %payload.project_id,
+            query_len = payload.query.len(),
+            limit = payload.limit,
+            min_score = payload.min_score
+        );
         let req = self.http.post(url).json(&payload);
         let resp = self.auth(req).send().await?;
+        let status = resp.status();
         let v = resp.json::<Value>().await?;
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "memory.http.search.out",
+            status = %status
+        );
         Ok(v)
     }
 
     pub async fn send_hit(&self, payload: QAHitsPayload) -> anyhow::Result<Value> {
         let url = format!("{}/v1/qa/hit", self.base_url.trim_end_matches('/'));
+        let used = payload
+            .references
+            .iter()
+            .filter(|r| r.used == Some(true))
+            .count();
+        let shown = payload
+            .references
+            .iter()
+            .filter(|r| r.shown == Some(true))
+            .count();
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "memory.http.hit.in",
+            url = %url,
+            project_id = %payload.project_id,
+            references = payload.references.len(),
+            shown = shown,
+            used = used
+        );
         let req = self.http.post(url).json(&payload);
-        Ok(self.auth(req).send().await?.json::<Value>().await?)
+        let resp = self.auth(req).send().await?;
+        let status = resp.status();
+        let v = resp.json::<Value>().await?;
+        tracing::debug!(target: "memex.qa", stage = "memory.http.hit.out", status = %status);
+        Ok(v)
     }
 
     pub async fn send_candidate(&self, payload: QACandidatePayload) -> anyhow::Result<Value> {
         let url = format!("{}/v1/qa/candidates", self.base_url.trim_end_matches('/'));
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "memory.http.candidate.in",
+            url = %url,
+            project_id = %payload.project_id,
+            tags = payload.tags.len()
+        );
         let req = self.http.post(url).json(&payload);
-        Ok(self.auth(req).send().await?.json::<Value>().await?)
+        let resp = self.auth(req).send().await?;
+        let status = resp.status();
+        let v = resp.json::<Value>().await?;
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "memory.http.candidate.out",
+            status = %status
+        );
+        Ok(v)
     }
 
     pub async fn send_validate(&self, payload: QAValidationPayload) -> anyhow::Result<Value> {
         let url: String = format!("{}/v1/qa/validate", self.base_url.trim_end_matches('/'));
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "memory.http.validate.in",
+            url = %url,
+            project_id = %payload.project_id,
+            qa_id = %payload.qa_id,
+            result = ?payload.result
+        );
         let req = self.http.post(url).json(&payload);
-        Ok(self.auth(req).send().await?.json::<Value>().await?)
+        let resp = self.auth(req).send().await?;
+        let status = resp.status();
+        let v = resp.json::<Value>().await?;
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "memory.http.validate.out",
+            status = %status
+        );
+        Ok(v)
     }
 }

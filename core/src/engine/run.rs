@@ -28,7 +28,7 @@ where
         runner,
         run_id,
         capture_bytes,
-        silent,
+        stream_format,
         events_out_tx,
         policy,
         memory,
@@ -138,14 +138,6 @@ where
             }
         }
     }
-
-    tracing::debug!(
-        "run_with_query: run_id={}, starting session with cmd='{}', args={:?} , envs={:?}",
-        run_id,
-        session_args.cmd,
-        session_args.args,
-        session_args.envs
-    );
     // Start Session
     let session = match runner.start_session(&session_args).await {
         Ok(session) => session,
@@ -173,7 +165,8 @@ where
         policy,
         capture_bytes,
         events_out_tx: events_out_tx.clone(),
-        silent,
+        backend_kind: cfg.backend_kind.clone(),
+        stream_format: stream_format.clone(),
     };
 
     // Run Session (runner runtime is in core; caller may provide a custom session loop, e.g. TUI).
@@ -242,7 +235,6 @@ fn build_runner_and_args(
             base_envs,
             resume_id,
             model,
-            stream,
             stream_format,
         } => {
             let BackendPlan {
@@ -255,7 +247,6 @@ fn build_runner_and_args(
                     resume_id,
                     merged_query,
                     model,
-                    stream,
                     &stream_format,
                 )
                 .map_err(|e| RunnerError::Spawn(e.to_string()))?;

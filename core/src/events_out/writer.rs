@@ -3,6 +3,16 @@ use tokio::sync::mpsc;
 
 use crate::config::EventsOutConfig;
 
+fn audit_preview(s: &str) -> String {
+    const MAX: usize = 120;
+    if s.len() <= MAX {
+        return s.to_string();
+    }
+    let mut out = s[..MAX].to_string();
+    out.push('…');
+    out
+}
+
 #[derive(Clone)]
 pub struct EventsOutTx {
     tx: mpsc::Sender<String>,
@@ -57,6 +67,14 @@ pub async fn start_events_out(cfg: &EventsOutConfig) -> Result<Option<EventsOutT
         while let Some(mut line) = rx.recv().await {
             if !line.ends_with('\n') {
                 line.push('\n');
+            }
+            if path == "stdout:" {
+                tracing::debug!(
+                    target: "memex.stdout_audit",
+                    kind = "events_out",
+                    bytes = line.len(),
+                    preview = %audit_preview(line.trim_end())
+                );
             }
             if writer.write_all(line.as_bytes()).await.is_err() {
                 return;

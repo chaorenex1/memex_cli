@@ -23,7 +23,6 @@ pub use crate::runner::{
     run_session, PolicyAction, PolicyPlugin, RunOutcome, RunSessionArgs, RunnerEvent, RunnerPlugin,
     RunnerResult, RunnerSession, RunnerStartArgs, Signal,
 };
-pub use crate::stream::{StreamPlan, StreamStrategy};
 pub use crate::tool_event::{
     CompositeToolEventParser, MultiToolEventLineParser, ToolEvent, ToolEventRuntime, WrapperEvent,
     TOOL_EVENT_PREFIX,

@@ -13,9 +13,7 @@ pub async fn run_standard_flow(
     events_out_tx: Option<core_api::EventsOutTx>,
     run_id: String,
     recover_run_id: Option<String>,
-    stream_enabled: bool,
     stream_format: &str,
-    stream_silent: bool,
     policy: Option<Arc<dyn core_api::PolicyPlugin>>,
     memory: Option<Arc<dyn core_api::MemoryPlugin>>,
     gatekeeper: Arc<dyn core_api::GatekeeperPlugin>,
@@ -25,7 +23,6 @@ pub async fn run_standard_flow(
         args,
         run_args,
         recover_run_id,
-        stream_enabled,
         stream_format,
     );
     let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
@@ -37,7 +34,7 @@ pub async fn run_standard_flow(
             runner: runner_spec,
             run_id,
             capture_bytes: args.capture_bytes,
-            silent: stream_silent,
+            stream_format: stream_format.to_string(),
             events_out_tx,
             policy,
             memory,
@@ -53,7 +50,8 @@ pub async fn run_standard_flow(
                 events_out: input.events_out_tx,
                 event_tx: None,
                 run_id: &input.run_id,
-                silent: input.silent,
+                backend_kind: &input.backend_kind,
+                stream_format: &input.stream_format,
                 abort_rx: None,
             })
             .await
@@ -93,7 +91,6 @@ fn build_plan_request(
     args: &Args,
     run_args: Option<&RunArgs>,
     recover_run_id: Option<String>,
-    stream_enabled: bool,
     stream_format: &str,
 ) -> PlanRequest {
     let mode = match run_args {
@@ -132,7 +129,6 @@ fn build_plan_request(
     PlanRequest {
         mode,
         resume_id: recover_run_id,
-        stream: stream_enabled,
         stream_format: stream_format.to_string(),
     }
 }

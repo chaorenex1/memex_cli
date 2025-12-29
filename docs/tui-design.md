@@ -6,8 +6,8 @@
 
 ## 二、触发条件
 
-- `--stream` 为 `true`
-- `--stream-format` 为 `"text"`（默认值）
+- `--tui` 为 `true`
+- `--stream-format` 为 `"text"`（TUI 会强制为 text）
 
 ## 三、技术选型
 
@@ -60,7 +60,7 @@ let stream_format = run_args
 
 let should_use_tui = run_args
     .as_ref()
-    .map(|ra| ra.stream && ra.stream_format == "text")
+    .map(|ra| ra.tui && ra.stream_format == "text")
     .unwrap_or(false);
 
 if should_use_tui {

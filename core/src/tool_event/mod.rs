@@ -18,6 +18,8 @@ pub use model::{ToolEvent, TOOL_EVENT_PREFIX};
 pub use multi_parser::{format_tool_event_line, parse_tool_event_line, MultiToolEventLineParser};
 pub use parser::{CompositeToolEventParser, PrefixedJsonlParser, ToolEventParser};
 pub use run_id_extract::extract_run_id_from_line;
+pub use run_id_extract::extract_run_id_from_value;
 pub use runtime::ToolEventRuntime;
+pub use stream_json::extract_assistant_text_from_stream_json_line;
 pub use stream_json::StreamJsonToolEventParser;
 pub use wrapper_event::WrapperEvent;

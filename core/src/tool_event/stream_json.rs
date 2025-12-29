@@ -4,6 +4,38 @@ use serde_json::Value;
 
 use crate::tool_event::ToolEvent;
 
+pub fn extract_assistant_text_from_stream_json_line(line: &str) -> Option<String> {
+    let s = line.trim();
+    if !(s.starts_with('{') && s.ends_with('}')) {
+        return None;
+    }
+
+    let v: Value = serde_json::from_str(s).ok()?;
+
+    // Claude stream-json: assistant message with content items like:
+    // {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
+    if v.get("type").and_then(|x| x.as_str()) == Some("assistant") {
+        let items = v
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_array())?;
+
+        for item in items {
+            let ty = item.get("type").and_then(|x| x.as_str()).unwrap_or("");
+            if ty != "text" && ty != "output_text" {
+                continue;
+            }
+            if let Some(t) = item.get("text").and_then(|x| x.as_str()) {
+                if !t.is_empty() {
+                    return Some(t.to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Parses "stream-json" style lines emitted by external CLIs (e.g. codex/claude/gemini).
 ///
 /// It is intentionally best-effort:
@@ -20,14 +52,7 @@ impl StreamJsonToolEventParser {
         Self::default()
     }
 
-    pub fn parse_line(&mut self, line: &str) -> Option<ToolEvent> {
-        let s = line.trim();
-        if !(s.starts_with('{') && s.ends_with('}')) {
-            return None;
-        }
-
-        let v: Value = serde_json::from_str(s).ok()?;
-
+    pub fn parse_value(&mut self, v: &Value) -> Option<ToolEvent> {
         // Claude stream-json
         // Shape examples (simplified):
         // - {"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"TodoWrite","input":{...}}]}}
@@ -87,9 +112,6 @@ impl StreamJsonToolEventParser {
                         .and_then(|x| x.as_str())
                         .map(|x| x.to_string());
 
-                    // Claude doesn't always expose an explicit ok/error flag here.
-                    // Best-effort: treat presence of tool_use_result.isError as authoritative,
-                    // otherwise fall back to "has content".
                     let ok = v
                         .get("tool_use_result")
                         .and_then(|r| r.get("isError").or_else(|| r.get("is_error")))
@@ -269,8 +291,133 @@ impl StreamJsonToolEventParser {
                     });
                 }
             }
+
+            // Codex agent output (assistant text)
+            if v.get("type").and_then(|x| x.as_str()) == Some("item.completed")
+                && item.get("type").and_then(|x| x.as_str()) == Some("agent_message")
+            {
+                let id = item
+                    .get("id")
+                    .and_then(|x| x.as_str())
+                    .map(|x| x.to_string());
+                let text = item
+                    .get("text")
+                    .and_then(|x| x.as_str())
+                    .map(|x| x.to_string())
+                    .unwrap_or_default();
+
+                return Some(ToolEvent {
+                    v: 1,
+                    event_type: "assistant.output".to_string(),
+                    ts: None,
+                    run_id: None,
+                    id,
+                    tool: None,
+                    action: None,
+                    args: Value::Null,
+                    ok: None,
+                    output: Some(Value::String(text)),
+                    error: None,
+                    rationale: None,
+                });
+            }
+
+            // Codex reasoning trace (optional; keep structured but not treated as tool.*)
+            if v.get("type").and_then(|x| x.as_str()) == Some("item.completed")
+                && item.get("type").and_then(|x| x.as_str()) == Some("reasoning")
+            {
+                let id = item
+                    .get("id")
+                    .and_then(|x| x.as_str())
+                    .map(|x| x.to_string());
+                let text = item
+                    .get("text")
+                    .and_then(|x| x.as_str())
+                    .map(|x| x.to_string())
+                    .unwrap_or_default();
+
+                return Some(ToolEvent {
+                    v: 1,
+                    event_type: "assistant.reasoning".to_string(),
+                    ts: None,
+                    run_id: None,
+                    id,
+                    tool: None,
+                    action: None,
+                    args: Value::Null,
+                    ok: None,
+                    output: Some(Value::String(text)),
+                    error: None,
+                    rationale: None,
+                });
+            }
+
+            // Codex local command execution (best-effort mapping)
+            let is_cmd = item.get("type").and_then(|x| x.as_str()) == Some("command_execution");
+            if is_cmd {
+                let line_type = v.get("type").and_then(|x| x.as_str()).unwrap_or("");
+                let id = item
+                    .get("id")
+                    .and_then(|x| x.as_str())
+                    .map(|x| x.to_string());
+                let command = item.get("command").cloned().unwrap_or(Value::Null);
+
+                if line_type == "item.started" {
+                    return Some(ToolEvent {
+                        v: 1,
+                        event_type: "tool.request".to_string(),
+                        ts: None,
+                        run_id: None,
+                        id,
+                        tool: Some("command_execution".to_string()),
+                        action: Some("exec".to_string()),
+                        args: serde_json::json!({ "command": command }),
+                        ok: None,
+                        output: None,
+                        error: None,
+                        rationale: None,
+                    });
+                }
+
+                if line_type == "item.completed" {
+                    let exit_code = item.get("exit_code").and_then(|x| x.as_i64());
+                    let ok = exit_code.map(|c| c == 0);
+                    let output = item.get("aggregated_output").cloned();
+                    let status = item.get("status").and_then(|x| x.as_str()).unwrap_or("");
+                    let error = if status == "failed" {
+                        Some("command_execution_failed".to_string())
+                    } else {
+                        None
+                    };
+
+                    return Some(ToolEvent {
+                        v: 1,
+                        event_type: "tool.result".to_string(),
+                        ts: None,
+                        run_id: None,
+                        id,
+                        tool: Some("command_execution".to_string()),
+                        action: Some("exec".to_string()),
+                        args: Value::Null,
+                        ok,
+                        output: output.or_else(|| Some(serde_json::json!({ "exit_code": exit_code, "status": status }))),
+                        error,
+                        rationale: None,
+                    });
+                }
+            }
         }
 
         None
+    }
+
+    pub fn parse_line(&mut self, line: &str) -> Option<ToolEvent> {
+        let s = line.trim();
+        if !(s.starts_with('{') && s.ends_with('}')) {
+            return None;
+        }
+
+        let v: Value = serde_json::from_str(s).ok()?;
+        self.parse_value(&v)
     }
 }

@@ -15,7 +15,8 @@ pub struct RunSessionInput {
     pub policy: Option<Arc<dyn PolicyPlugin>>,
     pub capture_bytes: usize,
     pub events_out_tx: Option<EventsOutTx>,
-    pub silent: bool,
+    pub backend_kind: String,
+    pub stream_format: String,
 }
 
 pub enum RunnerSpec {
@@ -25,7 +26,6 @@ pub enum RunnerSpec {
         base_envs: HashMap<String, String>,
         resume_id: Option<String>,
         model: Option<String>,
-        stream: bool,
         stream_format: String,
     },
     Passthrough {
@@ -40,7 +40,7 @@ pub struct RunWithQueryArgs {
     pub runner: RunnerSpec,
     pub run_id: String,
     pub capture_bytes: usize,
-    pub silent: bool,
+    pub stream_format: String,
     pub events_out_tx: Option<EventsOutTx>,
     pub policy: Option<Arc<dyn PolicyPlugin>>,
     pub memory: Option<Arc<dyn MemoryPlugin>>,

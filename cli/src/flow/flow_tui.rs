@@ -58,9 +58,7 @@ pub async fn run_tui_flow(
     events_out_tx: Option<EventsOutTx>,
     run_id: String,
     _recover_run_id: Option<String>,
-    stream_enabled: bool,
     stream_format: &str,
-    _stream_silent: bool,
     policy: Option<Arc<dyn PolicyPlugin>>,
     memory: Option<Arc<dyn MemoryPlugin>>,
     gatekeeper: Arc<dyn core_api::GatekeeperPlugin>,
@@ -116,12 +114,7 @@ pub async fn run_tui_flow(
                                         tui.app.run_id = query_run_id.clone();
                                         tui.app.status = crate::tui::RunStatus::Running;
 
-                                        let plan_req = build_plan_request(
-                                            args,
-                                            run_args,
-                                            stream_enabled,
-                                            stream_format,
-                                        );
+                                        let plan_req = build_plan_request(args, run_args, stream_format);
                                         let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
 
                                         let query_policy = shared_policy.clone();
@@ -129,6 +122,7 @@ pub async fn run_tui_flow(
                                         let query_gatekeeper = shared_gatekeeper.clone();
                                         let events_out_tx = events_out_tx.clone();
                                         let runner_tx = runner_tx.clone();
+                                        let stream_format = stream_format.to_string();
                                         let (new_abort_tx, abort_rx) = mpsc::channel::<String>(1);
                                         abort_tx = Some(new_abort_tx);
 
@@ -144,7 +138,7 @@ pub async fn run_tui_flow(
                                                     runner: runner_spec,
                                                     run_id: query_run_id,
                                                     capture_bytes,
-                                                    silent: true,
+                                                    stream_format,
                                                     events_out_tx,
                                                     policy: query_policy,
                                                     memory: query_memory,
@@ -160,7 +154,8 @@ pub async fn run_tui_flow(
                                                         events_out: input.events_out_tx,
                                                         event_tx: Some(runner_tx),
                                                         run_id: &input.run_id,
-                                                        silent: input.silent,
+                                                        backend_kind: &input.backend_kind,
+                                                        stream_format: &input.stream_format,
                                                         abort_rx: Some(abort_rx),
                                                     })
                                                     .await
@@ -282,7 +277,6 @@ pub async fn run_tui_flow(
 fn build_plan_request(
     args: &Args,
     run_args: Option<&RunArgs>,
-    stream_enabled: bool,
     stream_format: &str,
 ) -> PlanRequest {
     let mode = match run_args {
@@ -321,7 +315,6 @@ fn build_plan_request(
     PlanRequest {
         mode,
         resume_id: None,
-        stream: stream_enabled,
         stream_format: stream_format.to_string(),
     }
 }

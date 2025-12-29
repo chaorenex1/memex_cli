@@ -1,7 +1,7 @@
 ITEMS 132
 ---
-0009 | TUI 设计方案 > 二、触发条件 | - `--stream` 为 `true`
-0010 | TUI 设计方案 > 二、触发条件 | - `--stream-format` 为 `"text"`（默认值）
+0009 | TUI 设计方案 > 二、触发条件 | - `--tui` 为 `true`
+0010 | TUI 设计方案 > 二、触发条件 | - `--stream-format` 不影响是否启用 TUI（仅影响解析器）
 0017 | TUI 设计方案 > 三、技术选型 > 推荐库：`ratatui` | - 现代化的 Rust TUI 框架，基于 `crossterm`
 0018 | TUI 设计方案 > 三、技术选型 > 推荐库：`ratatui` | - 异步友好，与 `tokio` 无缝集成
 0019 | TUI 设计方案 > 三、技术选型 > 推荐库：`ratatui` | - 活跃维护，文档完善

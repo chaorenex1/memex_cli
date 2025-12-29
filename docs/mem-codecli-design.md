@@ -76,7 +76,7 @@
 - `--project-id <id>`：必需（也可由配置提供）；对应 API payload 的 `project_id` fileciteturn1file1
 - `--memory-url <url>`：记忆服务地址
 - `--memory-on/--memory-off`：是否启用记忆增强
-- `--stream`：流式透传 stdout（默认开启；可通过 `--no-stream` 关闭）
+-（已移除）`--stream`：历史遗留的“透传子进程 stdout/stderr”开关；现在统一由 `--stream-format`（解析方式）+ `--tui`（输出目的地）决定。
 - `--inject-mode <system|user|both>`：注入到 system 还是 user
 - `--gatekeeper <off|soft|hard>`：
   - off：不写 candidate

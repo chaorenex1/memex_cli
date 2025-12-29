@@ -1,7 +1,6 @@
 //! CLI 应用装配层：合并配置覆盖、构建 services/stream，并在 Standard/TUI flow 之间分发。
 use crate::commands::cli::{Args, RunArgs};
 use memex_core::api as core_api;
-use memex_plugins::factory;
 
 use crate::flow::{standard, tui};
 
@@ -41,17 +40,6 @@ pub async fn run_app_with_config(
         .as_ref()
         .map(|ra| ra.stream_format.clone())
         .unwrap_or_else(|| "text".to_string());
-    let mut stream_enabled = run_args.as_ref().map(|ra| ra.stream).unwrap_or(false);
-
-    if force_tui {
-        stream_enabled = true;
-        if stream_format != "text" {
-            stream_format = "text".to_string();
-        }
-    }
-
-    let stream = factory::build_stream(&stream_format);
-    let stream_plan = stream.apply(&mut cfg);
     let mut should_use_tui = force_tui;
     tracing::info!("TUI force enabled: {}", force_tui);
     tracing::info!("TUI config enabled: {}", cfg.tui.enabled);
@@ -82,9 +70,7 @@ pub async fn run_app_with_config(
             events_out_tx,
             run_id,
             recover_run_id.clone(),
-            stream_enabled,
             &stream_format,
-            stream_plan.silent,
             services.policy,
             services.memory,
             services.gatekeeper,
@@ -98,9 +84,7 @@ pub async fn run_app_with_config(
             events_out_tx,
             run_id,
             recover_run_id.clone(),
-            stream_enabled,
             &stream_format,
-            stream_plan.silent,
             services.policy,
             services.memory,
             services.gatekeeper,

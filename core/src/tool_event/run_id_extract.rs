@@ -12,8 +12,11 @@ pub fn extract_run_id_from_line(line: &str) -> Option<String> {
     }
 
     let v: Value = serde_json::from_str(s).ok()?;
+    extract_run_id_from_value(&v)
+}
 
-    for key in ["session_id", "sessionId", "run_id", "runId"] {
+pub fn extract_run_id_from_value(v: &Value) -> Option<String> {
+    for key in ["session_id", "sessionId", "run_id", "runId", "thread_id"] {
         if let Some(id) = v.get(key).and_then(|x| x.as_str()) {
             let id = id.trim();
             if !id.is_empty() {

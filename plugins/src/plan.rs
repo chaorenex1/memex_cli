@@ -24,7 +24,6 @@ pub enum PlanMode {
 pub struct PlanRequest {
     pub mode: PlanMode,
     pub resume_id: Option<String>,
-    pub stream: bool,
     pub stream_format: String,
 }
 
@@ -32,7 +31,8 @@ pub fn build_runner_spec(
     cfg: &mut core_api::AppConfig,
     req: PlanRequest,
 ) -> Result<(core_api::RunnerSpec, Option<serde_json::Value>), core_api::RunnerError> {
-    let mut base_envs: HashMap<String, String> = HashMap::new();
+    // 初始化 base_envs 时继承当前进程的环境变量（特别是 PATH）
+    let mut base_envs: HashMap<String, String> = std::env::vars().collect();
 
     match req.mode {
         PlanMode::Backend {
@@ -79,7 +79,6 @@ pub fn build_runner_spec(
                     base_envs,
                     resume_id: req.resume_id,
                     model,
-                    stream: req.stream,
                     stream_format: req.stream_format,
                 },
                 start_data,

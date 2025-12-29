@@ -20,6 +20,19 @@ impl<P: ToolEventParser> ToolEventRuntime<P> {
         }
     }
 
+    pub async fn send_out(&self, mut ev: ToolEvent) {
+        if ev.run_id.is_none() {
+            if let Some(id) = self.effective_run_id().map(|x| x.to_string()) {
+                ev.run_id = Some(id);
+            }
+        }
+
+        if let Some(out) = &self.events_out {
+            let s = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
+            out.send_line(s).await;
+        }
+    }
+
     pub async fn observe_line(&mut self, line: &str) -> Option<ToolEvent> {
         if self.discovered_run_id.is_none() {
             if let Some(id) = extract_run_id_from_line(line) {

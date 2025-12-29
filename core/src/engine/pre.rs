@@ -23,6 +23,15 @@ pub(crate) struct PreRun {
 }
 
 pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun {
+    tracing::debug!(
+        target: "memex.qa",
+        stage = "pre.start",
+        project_id = %ctx.project_id,
+        query_len = user_query.len(),
+        memory_enabled = ctx.memory.is_some(),
+        limit = ctx.memory_search_limit,
+        min_score = ctx.memory_min_score
+    );
     let Some(mem) = ctx.memory else {
         return PreRun {
             merged_query: user_query.to_string(),
@@ -39,10 +48,12 @@ pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun
         min_score: ctx.memory_min_score,
     };
 
+    tracing::debug!(target: "memex.qa", stage = "memory.search.in");
     let matches = match mem.search(payload).await {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!("memory search failed: {}", e);
+            tracing::debug!(target: "memex.qa", stage = "memory.search.out", ok = false);
             return PreRun {
                 merged_query: user_query.to_string(),
                 shown_qa_ids: vec![],
@@ -51,6 +62,12 @@ pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun
             };
         }
     };
+    tracing::debug!(
+        target: "memex.qa",
+        stage = "memory.search.out",
+        ok = true,
+        matches = matches.len()
+    );
 
     let mut ev = WrapperEvent::new("memory.search.result", chrono::Utc::now().to_rfc3339());
     ev.data = Some(serde_json::json!({
@@ -77,12 +94,18 @@ pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun
 
     let memory_ctx = render_memory_context(&decision.inject_list, ctx.inject_cfg);
     let merged = merge_prompt(user_query, &memory_ctx);
-    let shown = decision
+    let shown: Vec<String> = decision
         .inject_list
         .iter()
         .map(|x| x.qa_id.clone())
         .collect();
 
+    tracing::debug!(
+        target: "memex.qa",
+        stage = "pre.end",
+        merged_query_len = merged.len(),
+        shown = shown.len()
+    );
     PreRun {
         merged_query: merged,
         shown_qa_ids: shown,

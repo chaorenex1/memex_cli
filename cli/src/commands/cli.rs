@@ -60,13 +60,10 @@ pub struct RunArgs {
     #[arg(long, group = "input")]
     pub stdin: bool,
 
-    #[arg(long)]
-    pub stream: bool,
-
     #[arg(long, default_value = "text")]
     pub stream_format: String,
 
-    /// Force TUI mode (implies --stream and --stream-format=text).
+    /// Force TUI mode (does not affect `--stream-format`).
     #[arg(long, default_value_t = false)]
     pub tui: bool,
 

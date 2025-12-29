@@ -4,6 +4,8 @@ use async_trait::async_trait;
 use std::process::Stdio;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::process::{Child, Command};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 pub struct CodeCliRunnerPlugin {}
 
@@ -26,6 +28,12 @@ impl RunnerPlugin for CodeCliRunnerPlugin {
     }
 
     async fn start_session(&self, args: &RunnerStartArgs) -> Result<Box<dyn RunnerSession>> {
+        tracing::debug!(
+            "Starting CodeCliRunnerSession: cmd={:?}, args={:?},envs={:?}",
+            args.cmd,
+            args.args,
+            args.envs,
+        );
         let mut cmd = Command::new(&args.cmd);
         cmd.args(&args.args)
             .envs(&args.envs)
@@ -50,6 +58,75 @@ struct CodeCliRunnerSession {
     child: Child,
 }
 
+/// 调试包装器：记录所有读取的数据
+struct DebugReadWrapper<R> {
+    inner: R,
+    label: String,
+    buffer: Vec<u8>,
+}
+
+impl<R: AsyncRead + Unpin> DebugReadWrapper<R> {
+    fn new(inner: R, label: &str) -> Self {
+        tracing::debug!("Created debug wrapper for {}", label);
+        Self {
+            inner,
+            label: label.to_string(),
+            buffer: Vec::new(),
+        }
+    }
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for DebugReadWrapper<R> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let before = buf.filled().len();
+        let result = Pin::new(&mut self.inner).poll_read(cx, buf);
+        
+        if let Poll::Ready(Ok(())) = &result {
+            let after = buf.filled().len();
+            let read_len = after - before;
+            
+            if read_len > 0 {
+                let data = &buf.filled()[before..after];
+                self.buffer.extend_from_slice(data);
+                
+                // 每次读取都记录
+                if let Ok(s) = std::str::from_utf8(data) {
+                    tracing::debug!("[{}] Read {} bytes: {:?}", self.label, read_len, s);
+                } else {
+                    tracing::debug!("[{}] Read {} bytes (binary)", self.label, read_len);
+                }
+                
+                // 定期输出累积的内容
+                if self.buffer.len() > 1024 {
+                    if let Ok(s) = std::str::from_utf8(&self.buffer) {
+                        tracing::debug!("[{}] Accumulated output ({} bytes):\n{}", 
+                            self.label, self.buffer.len(), s);
+                    }
+                    self.buffer.clear();
+                }
+            }
+        }
+        
+        result
+    }
+}
+
+impl<R> Drop for DebugReadWrapper<R> {
+    fn drop(&mut self) {
+        if !self.buffer.is_empty() {
+            if let Ok(s) = std::str::from_utf8(&self.buffer) {
+                tracing::debug!("[{}] Final output ({} bytes):\n{}", 
+                    self.label, self.buffer.len(), s);
+            }
+        }
+        tracing::debug!("[{}] Stream closed", self.label);
+    }
+}
+
 #[async_trait]
 impl RunnerSession for CodeCliRunnerSession {
     fn stdin(&mut self) -> Option<Box<dyn AsyncWrite + Unpin + Send>> {
@@ -63,7 +140,10 @@ impl RunnerSession for CodeCliRunnerSession {
         self.child
             .stdout
             .take()
-            .map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>)
+            .map(|s| {
+                tracing::debug!("Wrapping stdout with debug wrapper");
+                Box::new(DebugReadWrapper::new(s, "STDOUT")) as Box<dyn AsyncRead + Unpin + Send>
+            })
     }
 
     fn stderr(&mut self) -> Option<Box<dyn AsyncRead + Unpin + Send>> {

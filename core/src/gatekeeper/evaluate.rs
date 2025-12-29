@@ -20,6 +20,15 @@ impl Gatekeeper {
         run: &RunOutcome,
         tool_events: &[ToolEvent],
     ) -> GatekeeperDecision {
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "gatekeeper.evaluate.in",
+            matches = matches.len(),
+            exit_code = run.exit_code,
+            shown = run.shown_qa_ids.len(),
+            used = run.used_qa_ids.len(),
+            tool_events = tool_events.len()
+        );
         let mut reasons: Vec<String> = Vec::new();
 
         let top1_score = matches
@@ -253,14 +262,25 @@ impl Gatekeeper {
             );
         }
 
-        GatekeeperDecision {
+        let decision = GatekeeperDecision {
             inject_list,
             should_write_candidate,
             hit_refs,
             validate_plans,
             reasons,
             signals,
-        }
+        };
+
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "gatekeeper.evaluate.out",
+            inject = decision.inject_list.len(),
+            hit_refs = decision.hit_refs.len(),
+            validate_plans = decision.validate_plans.len(),
+            should_write_candidate = decision.should_write_candidate
+        );
+
+        decision
     }
 }
 

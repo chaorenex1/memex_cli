@@ -24,6 +24,17 @@ pub(crate) async fn post_run(
     shown_qa_ids: Vec<String>,
     user_query: &str,
 ) -> Result<(RunOutcome, GatekeeperDecision), RunnerError> {
+    tracing::debug!(
+        target: "memex.qa",
+        stage = "post.start",
+        project_id = %ctx.project_id,
+        run_id = %run.run_id,
+        exit_code = run.exit_code,
+        matches = matches.len(),
+        shown = shown_qa_ids.len(),
+        user_query_len = user_query.len(),
+        memory_enabled = ctx.memory.is_some()
+    );
     let run_outcome = RunOutcome {
         exit_code: run.exit_code,
         duration_ms: run.duration_ms,
@@ -33,6 +44,12 @@ pub(crate) async fn post_run(
         shown_qa_ids,
         used_qa_ids: crate::gatekeeper::extract_qa_refs(&run.stdout_tail),
     };
+
+    tracing::debug!(
+        target: "memex.qa",
+        stage = "post.used_refs",
+        used = run_outcome.used_qa_ids.len()
+    );
 
     let decision =
         ctx.gatekeeper
@@ -47,11 +64,19 @@ pub(crate) async fn post_run(
     write_wrapper_event(ctx.events_out, &decision_event).await;
 
     if let Some(mem) = ctx.memory {
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "post.memory.write_plan",
+            should_write_candidate = decision.should_write_candidate,
+            hit_refs = decision.hit_refs.len(),
+            validate_plans = decision.validate_plans.len()
+        );
 
         let tool_events_lite: Vec<ToolEventLite> =
             run.tool_events.iter().map(|e| e.into()).collect();
 
         let candidate_drafts: Vec<CandidateDraft> = if decision.should_write_candidate {
+            tracing::debug!(target: "memex.qa", stage = "candidate.extract.in");
             crate::memory::extract_candidates(
                 ctx.cand_cfg,
                 user_query,
@@ -62,20 +87,64 @@ pub(crate) async fn post_run(
         } else {
             vec![]
         };
+        tracing::debug!(
+            target: "memex.qa",
+            stage = "candidate.extract.out",
+            drafts = candidate_drafts.len()
+        );
 
         if let Some(hit_payload) = build_hit_payload(ctx.project_id, &decision) {
+            let used = hit_payload
+                .references
+                .iter()
+                .filter(|r| r.used == Some(true))
+                .count();
+            let shown = hit_payload
+                .references
+                .iter()
+                .filter(|r| r.shown == Some(true))
+                .count();
+            tracing::debug!(
+                target: "memex.qa",
+                stage = "memory.hit.in",
+                references = hit_payload.references.len(),
+                shown = shown,
+                used = used
+            );
             let _ = mem.record_hit(hit_payload).await;
+            tracing::debug!(target: "memex.qa", stage = "memory.hit.out");
         }
         for v in build_validate_payloads(ctx.project_id, &decision) {
+            tracing::debug!(
+                target: "memex.qa",
+                stage = "memory.validate.in",
+                qa_id = %v.qa_id,
+                result = ?v.result
+            );
             let _ = mem.record_validation(v).await;
+            tracing::debug!(target: "memex.qa", stage = "memory.validate.out");
         }
         if decision.should_write_candidate && !candidate_drafts.is_empty() {
             let payloads = build_candidate_payloads(ctx.project_id, &candidate_drafts);
             for c in payloads {
+                tracing::debug!(
+                    target: "memex.qa",
+                    stage = "memory.candidate.in",
+                    tags = c.tags.len()
+                );
                 let _ = mem.record_candidate(c).await;
+                tracing::debug!(target: "memex.qa", stage = "memory.candidate.out");
             }
         }
     }
 
+    tracing::debug!(
+        target: "memex.qa",
+        stage = "post.end",
+        should_write_candidate = decision.should_write_candidate,
+        inject = decision.inject_list.len(),
+        hit_refs = decision.hit_refs.len(),
+        validate_plans = decision.validate_plans.len()
+    );
     Ok((run_outcome, decision))
 }
