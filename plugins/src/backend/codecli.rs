@@ -302,26 +302,7 @@ fn get_npm_global_bin() -> Result<std::path::PathBuf> {
     // 策略3: 调用 npm bin -g
     let output = Command::new("npm")
         .args(["bin", "-g"])
-        .output()
-        .or_else(|e| {
-            tracing::debug!("Failed to run 'npm': {}", e);
-            // Windows fallback
-            #[cfg(target_os = "windows")]
-            {
-                tracing::debug!("Trying 'npm.cmd' instead...");
-                Command::new("npm.cmd").args(["bin", "-g"]).output()
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                Err(e)
-            }
-        })
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to execute npm: {}. Make sure npm is installed and in PATH.",
-                e
-            )
-        })?;
+        .output()?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
