@@ -26,18 +26,19 @@ pub async fn run_app_with_config(
             svc_cfg.api_key = key.clone();
         }
     }
-    let project_id = run_args
-        .as_ref()
-        .map(|ra| ra.project_id.clone())
-        .unwrap_or_else(|| {
-            Some(
-                std::env::current_dir()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string(),
-            )
-        })
-        .unwrap();
+    let project_id =
+        if let Some(project_id) = run_args.as_ref().and_then(|ra| ra.project_id.clone()) {
+            project_id
+        } else {
+            std::env::current_dir()
+                .map_err(|e| {
+                    core_api::RunnerError::Config(format!(
+                        "failed to determine project_id from current_dir fallback: {e}"
+                    ))
+                })?
+                .to_string_lossy()
+                .to_string()
+        };
 
     let stream_format = run_args
         .as_ref()

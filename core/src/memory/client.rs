@@ -124,7 +124,7 @@ impl MemoryClient {
         Ok(v)
     }
 
-    pub async fn task_grade(&self, prompt: String) -> anyhow::Result<Value> {
+    pub async  fn task_grade(&self, prompt: String) -> anyhow::Result<Value> {
         let url = format!("{}/v1/task/grade", self.base_url.trim_end_matches('/'));
         tracing::debug!(
             target: "memex.task",

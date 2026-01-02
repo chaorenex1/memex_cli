@@ -50,6 +50,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             }
 
             if let Some(provider) = &model_provider {
+                args.push("--oss".to_string());
                 args.push("--local-provider".to_string());
                 args.push(provider.clone());
             }
@@ -82,7 +83,11 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             args.push("--output-format".to_string());
             args.push("stream-json".to_string());
             args.push("--verbose".to_string());
-            args.push("--dangerously-skip-permissions".to_string());
+            args.push("--sandbox".to_string());
+            args.push("workspace-write".to_string());
+            args.push("--ask-for-approval".to_string());
+            args.push("never".to_string());
+            args.push("--network-access".to_string());
 
             if let Some(m) = &model {
                 args.push("--model".to_string());
