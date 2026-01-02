@@ -23,6 +23,7 @@ pub async fn run_standard_flow(
         recover_run_id,
         stream_format,
         project_id,
+        &user_query,
     )
     .await;
     let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
@@ -93,6 +94,7 @@ async fn build_plan_request(
     recover_run_id: Option<String>,
     stream_format: &str,
     project_id: &str,
+    user_query: &str,
 ) -> PlanRequest {
     let mode = match run_args {
         Some(ra) => {
@@ -102,7 +104,7 @@ async fn build_plan_request(
             });
 
             let task_grade_result = infer_task_level(
-                &ra.prompt.clone().unwrap_or_default(),
+                user_query,
                 ra.model.as_deref().unwrap_or(""),
                 ra.model_provider.as_deref().unwrap_or(""),
                 query_services,
