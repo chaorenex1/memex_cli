@@ -90,4 +90,21 @@ impl MemoryPlugin for MemoryServicePlugin {
         tracing::debug!(target: "memex.qa", stage = "memory.plugin.validate.out");
         Ok(())
     }
+
+    async fn task_grade(&self, prompt: String) -> Result<core_api::TaskGradeResult> {
+        tracing::debug!(
+            target: "memex.task",
+            stage = "memory.plugin.task_grade.in",
+            prompt_len = prompt.len()
+        );
+        let raw = self.client.task_grade(prompt).await?;
+        let out = serde_json::from_value::<core_api::TaskGradeResult>(raw)
+            .map_err(|e| anyhow::anyhow!("Failed to parse TaskGradeResult: {}", e))?;
+        tracing::debug!(
+            target: "memex.task",
+            stage = "memory.plugin.task_grade.out",
+            grade = ?out.confidence
+        );
+        Ok(out)
+    }
 }

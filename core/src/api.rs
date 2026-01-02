@@ -13,6 +13,7 @@ pub use crate::error::{CliError, RunnerError};
 pub use crate::events_out::EventsOutTx;
 pub use crate::gatekeeper::{
     Gatekeeper, GatekeeperConfig, GatekeeperDecision, GatekeeperPlugin, SearchMatch,
+    TaskGradeResult,
 };
 pub use crate::memory::{
     parse_search_matches, MemoryClient, MemoryPlugin, QACandidatePayload, QAHitsPayload,

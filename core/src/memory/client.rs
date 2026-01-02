@@ -123,4 +123,23 @@ impl MemoryClient {
         );
         Ok(v)
     }
+
+    pub async fn task_grade(&self, prompt: String) -> anyhow::Result<Value> {
+        let url = format!("{}/v1/task/grade", self.base_url.trim_end_matches('/'));
+        tracing::debug!(
+            target: "memex.task",
+            stage = "memory.http.task_grade.in",
+            url = %url
+        );
+        let req = self.http.post(url).json(&serde_json::json!({ "prompt": prompt }));
+        let resp = self.auth(req).send().await?;
+        let status = resp.status();
+        let v = resp.json::<Value>().await?;
+        tracing::debug!(
+            target: "memex.task",
+            stage = "memory.http.task_grade.out",
+            status = %status
+        );
+        Ok(v)
+    }
 }

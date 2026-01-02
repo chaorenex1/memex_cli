@@ -1,5 +1,20 @@
 ﻿use serde::{Deserialize, Serialize};
 use serde_json::Value;
+/**
+ {
+  "task_level": "L0 | L1 | L2 | L3",
+  "reason": "<one-sentence justification>",
+  "recommended_model": "<model_name>",
+  "confidence": 0.0-1.0
+}
+ */
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskGradeResult {
+    pub task_level: String,
+    pub reason: String,
+    pub recommended_model: String,
+    pub confidence: f32,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchMatch {
