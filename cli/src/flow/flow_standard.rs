@@ -116,15 +116,28 @@ async fn build_plan_request(
                 task_grade_result.confidence,
             );
 
-            PlanMode::Backend {
-                backend_spec: ra.backend.clone(),
-                backend_kind,
-                env_file: ra.env_file.clone(),
-                env: ra.env.clone(),
-                model: task_grade_result.recommended_model.clone().into(),
-                model_provider: task_grade_result.recommended_model_provider.clone(),
-                project_id: Some(project_id.to_string()),
-                task_level: Some(task_grade_result.task_level.to_string()),
+            if ra.backend == "codex" {
+                PlanMode::Backend {
+                    backend_spec: ra.backend.clone(),
+                    backend_kind,
+                    env_file: ra.env_file.clone(),
+                    env: ra.env.clone(),
+                    model: task_grade_result.recommended_model.clone().into(),
+                    model_provider: task_grade_result.recommended_model_provider.clone(),
+                    project_id: Some(project_id.to_string()),
+                    task_level: Some(task_grade_result.task_level.to_string()),
+                }
+            } else {
+                PlanMode::Backend {
+                    backend_spec: ra.backend.clone(),
+                    backend_kind,
+                    env_file: ra.env_file.clone(),
+                    env: ra.env.clone(),
+                    model: ra.model.clone().unwrap_or_default().into(),
+                    model_provider: ra.model_provider.clone(),
+                    project_id: Some(project_id.to_string()),
+                    task_level: None,
+                }
             }
         }
         None => PlanMode::Legacy {
