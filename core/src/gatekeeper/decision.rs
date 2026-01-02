@@ -10,7 +10,7 @@ use serde_json::Value;
  */
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskGradeResult {
-    pub task_level: u8,
+    pub task_level: String,
     pub reason: String,
     pub recommended_model: String,
     pub recommended_model_provider: Option<String>,

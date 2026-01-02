@@ -9,7 +9,7 @@ pub async fn infer_task_level(
     let s = prompt.trim();
     let Some(memory_plugin) = query_services.memory.as_ref() else {
         return core_api::TaskGradeResult {
-            task_level: 0,
+            task_level: "L1".to_string(),
             reason: "Memory plugin not available".to_string(),
             recommended_model: model.to_string(),
             recommended_model_provider: Some(model_provider.to_string()),
@@ -21,7 +21,7 @@ pub async fn infer_task_level(
         Err(e) => {
             tracing::error!("Failed to infer task level: {}", e);
             core_api::TaskGradeResult {
-                task_level: 0,
+                task_level: "L1".to_string(),
                 reason: "Failed to infer task level".to_string(),
                 recommended_model: model.to_string(),
                 recommended_model_provider: Some(model_provider.to_string()),
