@@ -19,10 +19,12 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         resume_id: Option<String>,
         prompt: String,
         model: Option<String>,
+        model_provider: Option<String>,
+        project_id: Option<String>,
         stream_format: &str,
     ) -> Result<core_api::BackendPlan> {
         let mut args: Vec<String> = Vec::new();
-        let envs = base_envs;
+        let mut envs = base_envs;
         tracing::info!(
             "Preparing CodeCLI backend plan with backend: {}, model: {:?}, resume_id: {:?}, stream_format: {}",
             backend,
@@ -47,7 +49,17 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 args.push(m.clone());
             }
 
+            if let Some(provider) = &model_provider {
+                args.push("--local-provider".to_string());
+                args.push(provider.clone());
+            }
+
             args.push("--json".to_string());
+
+            if let Some(dir) = &project_id {
+                args.push("--cd".to_string());
+                args.push(dir.clone());
+            }
 
             // Resume: codex exec [--json] resume <id> <prompt>
             if let Some(resume_id) = resume_id.as_deref() {
@@ -63,9 +75,6 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         } else if cmd_type.contains("claude") {
             // Matches examples like:
             // claude "..." -p --output-format stream-json --verbose
-            if !prompt.is_empty() {
-                args.push(prompt);
-            }
 
             // Always use non-interactive output mode for the wrapper.
             args.push("-p".to_string());
@@ -73,6 +82,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             args.push("--output-format".to_string());
             args.push("stream-json".to_string());
             args.push("--verbose".to_string());
+            args.push("--dangerously-skip-permissions".to_string());
 
             if let Some(m) = &model {
                 args.push("--model".to_string());
@@ -86,6 +96,14 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                     args.push(resume_id.to_string());
                 }
             }
+            if let Some(dir) = &project_id {
+                args.push("--add-dir".to_string());
+                args.push(dir.clone());
+                envs.insert("WORKSPACE_DIR".to_string(), dir.clone());
+            }
+            if !prompt.is_empty() {
+                args.push(prompt);
+            }
         } else if cmd_type.contains("gemini") {
             // Matches examples like:
             // gemini -p "..." -y -o stream-json
@@ -96,6 +114,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
 
             args.push("-o".to_string());
             args.push("stream-json".to_string());
+            args.push("--screen-reader".to_string());
+            args.push("-y".to_string());
 
             // Resume: -r <id> (e.g. -r latest)
             if let Some(resume_id) = resume_id.as_deref() {
@@ -107,8 +127,14 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
 
             // Leave -y (YOLO) and auth concerns to the user's environment.
             if let Some(m) = &model {
-                args.push("--model".to_string());
+                args.push("--m".to_string());
                 args.push(m.clone());
+            }
+
+            if let Some(dir) = &project_id {
+                args.push("--include-directories".to_string());
+                args.push(dir.clone());
+                envs.insert("WORKSPACE_DIR".to_string(), dir.clone());
             }
         } else {
             // Generic passthrough-ish fallback (previous behavior).

@@ -29,10 +29,9 @@ where
         run_id,
         capture_bytes,
         stream_format,
+        project_id,
         events_out_tx,
-        policy,
-        memory,
-        gatekeeper,
+        services,
         wrapper_start_data,
     } = args;
 
@@ -52,6 +51,9 @@ where
         inject_cfg.placement,
         inject_cfg.max_items
     );
+    let memory = services.memory;
+    let gatekeeper = services.gatekeeper;
+    let policy = services.policy;
 
     let cand_cfg: CandidateExtractConfig = CandidateExtractConfig {
         max_candidates: cfg.candidate_extract.max_candidates,
@@ -73,7 +75,7 @@ where
     };
 
     let pre_ctx = EngineContext {
-        project_id: &cfg.project_id,
+        project_id: &project_id,
         inject_cfg: &inject_cfg,
         memory: memory.as_deref(),
         gatekeeper: gatekeeper.as_ref(),
@@ -195,7 +197,7 @@ where
     }
 
     let post_ctx = PostRunContext {
-        project_id: &cfg.project_id,
+        project_id: &project_id,
         cand_cfg: &cand_cfg,
         memory: memory.as_deref(),
         gatekeeper: gatekeeper.as_ref(),
@@ -231,6 +233,8 @@ fn build_runner_and_args(
             base_envs,
             resume_id,
             model,
+            model_provider,
+            project_id,
             stream_format,
         } => {
             let BackendPlan {
@@ -243,6 +247,8 @@ fn build_runner_and_args(
                     resume_id,
                     merged_query,
                     model,
+                    model_provider,
+                    project_id,
                     &stream_format,
                 )
                 .map_err(|e| RunnerError::Spawn(e.to_string()))?;

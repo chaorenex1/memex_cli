@@ -1,8 +1,6 @@
 //! TUI 执行流：单一事件循环处理输入/runner 事件/tick，并支持用户中止（abort）当前运行。
-use std::sync::Arc;
-
 use core_api::TuiConfig;
-use core_api::{EventsOutTx, MemoryPlugin, PolicyPlugin, RunSessionArgs, RunnerError, RunnerEvent};
+use core_api::{EventsOutTx, RunSessionArgs, RunnerError, RunnerEvent};
 use memex_core::api as core_api;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -57,14 +55,10 @@ pub async fn run_tui_flow(
     run_id: String,
     _recover_run_id: Option<String>,
     stream_format: &str,
-    policy: Option<Arc<dyn PolicyPlugin>>,
-    memory: Option<Arc<dyn MemoryPlugin>>,
-    gatekeeper: Arc<dyn core_api::GatekeeperPlugin>,
+    project_id: &str,
+    services: &core_api::Services,
 ) -> Result<i32, RunnerError> {
     let mut tui = TuiRuntime::new(&cfg.tui, run_id.clone())?;
-    let shared_policy = policy;
-    let shared_memory = memory;
-    let shared_gatekeeper = gatekeeper;
 
     use crate::tui::events::{InputEvent, InputReader};
     use crate::tui::ui;
@@ -112,15 +106,14 @@ pub async fn run_tui_flow(
                                         tui.app.run_id = query_run_id.clone();
                                         tui.app.status = crate::tui::RunStatus::Running;
 
-                                        let plan_req = build_plan_request(args, run_args, stream_format);
+                                        let plan_req = build_plan_request(args, run_args, stream_format, project_id);
                                         let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
 
-                                        let query_policy = shared_policy.clone();
-                                        let query_memory = shared_memory.clone();
-                                        let query_gatekeeper = shared_gatekeeper.clone();
+                                        let query_services = services.clone();
                                         let events_out_tx = events_out_tx.clone();
                                         let runner_tx = runner_tx.clone();
                                         let stream_format = stream_format.to_string();
+                                        let project_id = project_id.to_string();
                                         let (new_abort_tx, abort_rx) = mpsc::channel::<String>(1);
                                         abort_tx = Some(new_abort_tx);
 
@@ -137,10 +130,9 @@ pub async fn run_tui_flow(
                                                     run_id: query_run_id,
                                                     capture_bytes,
                                                     stream_format,
+                                                    project_id: project_id.to_string(),
                                                     events_out_tx,
-                                                    policy: query_policy,
-                                                    memory: query_memory,
-                                                    gatekeeper: query_gatekeeper,
+                                                    services: query_services,
                                                     wrapper_start_data: start_data,
                                                 },
                                                 |input| async move {
@@ -272,7 +264,12 @@ pub async fn run_tui_flow(
     Ok(last_exit_code)
 }
 
-fn build_plan_request(args: &Args, run_args: Option<&RunArgs>, stream_format: &str) -> PlanRequest {
+fn build_plan_request(
+    args: &Args,
+    run_args: Option<&RunArgs>,
+    stream_format: &str,
+    project_id: &str,
+) -> PlanRequest {
     let mode = match run_args {
         Some(ra) => {
             let backend_kind = ra.backend_kind.map(|kind| match kind {
@@ -297,6 +294,8 @@ fn build_plan_request(args: &Args, run_args: Option<&RunArgs>, stream_format: &s
                 env_file: ra.env_file.clone(),
                 env: ra.env.clone(),
                 model: ra.model.clone(),
+                model_provider: ra.model_provider.clone(),
+                project_id: Some(project_id.to_string()),
                 task_level: Some(task_level),
             }
         }

@@ -1,9 +1,7 @@
 //! 标准（非 TUI）执行流：解析用户输入、调用 plugins planner 生成 `RunnerSpec`，再通过 core 引擎执行一次会话。
-use memex_core::api as core_api;
-use std::sync::Arc;
-
 use crate::commands::cli::{Args, RunArgs};
 use crate::task_level::infer_task_level;
+use memex_core::api as core_api;
 use memex_plugins::plan::{build_runner_spec, PlanMode, PlanRequest};
 
 pub async fn run_standard_flow(
@@ -14,12 +12,11 @@ pub async fn run_standard_flow(
     run_id: String,
     recover_run_id: Option<String>,
     stream_format: &str,
-    policy: Option<Arc<dyn core_api::PolicyPlugin>>,
-    memory: Option<Arc<dyn core_api::MemoryPlugin>>,
-    gatekeeper: Arc<dyn core_api::GatekeeperPlugin>,
+    project_id: &str,
+    services: &core_api::Services,
 ) -> Result<i32, core_api::RunnerError> {
     let user_query = resolve_user_query(args, run_args)?;
-    let plan_req = build_plan_request(args, run_args, recover_run_id, stream_format);
+    let plan_req = build_plan_request(args, run_args, recover_run_id, stream_format, project_id);
     let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
 
     core_api::run_with_query(
@@ -30,10 +27,9 @@ pub async fn run_standard_flow(
             run_id,
             capture_bytes: args.capture_bytes,
             stream_format: stream_format.to_string(),
+            project_id: project_id.to_string(),
             events_out_tx,
-            policy,
-            memory,
-            gatekeeper,
+            services: services.clone(),
             wrapper_start_data: start_data,
         },
         |input| async move {
@@ -87,6 +83,7 @@ fn build_plan_request(
     run_args: Option<&RunArgs>,
     recover_run_id: Option<String>,
     stream_format: &str,
+    project_id: &str,
 ) -> PlanRequest {
     let mode = match run_args {
         Some(ra) => {
@@ -112,6 +109,8 @@ fn build_plan_request(
                 env_file: ra.env_file.clone(),
                 env: ra.env.clone(),
                 model: ra.model.clone(),
+                model_provider: ra.model_provider.clone(),
+                project_id: Some(project_id.to_string()),
                 task_level: Some(task_level),
             }
         }

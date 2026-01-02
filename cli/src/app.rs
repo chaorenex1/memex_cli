@@ -17,10 +17,6 @@ pub async fn run_app_with_config(
     let force_tui = run_args.as_ref().map(|ra| ra.tui).unwrap_or(false);
 
     if let Some(ra) = &run_args {
-        if let Some(pid) = &ra.project_id {
-            cfg.project_id = pid.clone();
-        }
-
         if let Some(url) = &ra.memory_base_url {
             let core_api::MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
             svc_cfg.base_url = url.clone();
@@ -30,11 +26,18 @@ pub async fn run_app_with_config(
             svc_cfg.api_key = key.clone();
         }
     }
-    if cfg.project_id.trim().is_empty() {
-        if let Ok(cwd) = std::env::current_dir() {
-            cfg.project_id = cwd.to_string_lossy().to_string();
-        }
-    }
+    let project_id = run_args
+        .as_ref()
+        .map(|ra| ra.project_id.clone())
+        .unwrap_or_else(|| {
+            Some(
+                std::env::current_dir()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+            )
+        })
+        .unwrap();
 
     let stream_format = run_args
         .as_ref()
@@ -71,9 +74,8 @@ pub async fn run_app_with_config(
             run_id,
             recover_run_id.clone(),
             &stream_format,
-            services.policy,
-            services.memory,
-            services.gatekeeper,
+            &project_id,
+            &services,
         )
         .await;
     } else {
@@ -85,9 +87,8 @@ pub async fn run_app_with_config(
             run_id,
             recover_run_id.clone(),
             &stream_format,
-            services.policy,
-            services.memory,
-            services.gatekeeper,
+            &project_id,
+            &services,
         )
         .await
     }

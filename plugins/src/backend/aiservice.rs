@@ -20,8 +20,11 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
         _resume_id: Option<String>,
         prompt: String,
         model: Option<String>,
+        model_provider: Option<String>,
+        project_id: Option<String>,
         stream_format: &str,
     ) -> Result<core_api::BackendPlan> {
+        tracing::debug!("AiServiceBackendStrategy planning with backend: {}, project_id: {:?}, model: {:?}, model_provider: {:?}", backend, project_id, model, model_provider);
         if !(backend.starts_with("http://") || backend.starts_with("https://")) {
             return Err(anyhow!(
                 "aiservice backend must be a URL (http/https), got: {}",

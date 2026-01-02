@@ -33,12 +33,7 @@ async fn main() {
 
 async fn real_main() -> Result<i32, CliError> {
     let mut args = cli::Args::parse();
-    let mut cfg = core_api::load_default().map_err(|e| CliError::Config(e.to_string()))?;
-    if cfg.project_id.trim().is_empty() {
-        if let Ok(cwd) = std::env::current_dir() {
-            cfg.project_id = cwd.to_string_lossy().to_string();
-        }
-    }
+    let cfg = core_api::load_default().map_err(|e| CliError::Config(e.to_string()))?;
     init_tracing(&cfg.logging).map_err(CliError::Command)?;
 
     let services_factory: Option<Arc<dyn core_api::ServicesFactory>> =
@@ -52,9 +47,7 @@ async fn real_main() -> Result<i32, CliError> {
     if let Some(cmd) = cmd {
         return dispatch(cmd, args, ctx).await;
     }
-
-    let exit = app::run_app_with_config(args, None, None, &ctx).await?;
-    Ok(exit)
+    Ok(0)
 }
 
 fn exit_code_for_error(e: &CliError) -> i32 {

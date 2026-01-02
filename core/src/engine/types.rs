@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use crate::backend::BackendStrategy;
 use crate::config::AppConfig;
+use crate::context::Services;
 use crate::events_out::EventsOutTx;
-use crate::gatekeeper::GatekeeperPlugin;
-use crate::memory::MemoryPlugin;
 use crate::runner::{PolicyPlugin, RunnerPlugin, RunnerSession, RunnerStartArgs};
 
 pub struct RunSessionInput {
@@ -26,6 +25,8 @@ pub enum RunnerSpec {
         base_envs: HashMap<String, String>,
         resume_id: Option<String>,
         model: Option<String>,
+        model_provider: Option<String>,
+        project_id: Option<String>,
         stream_format: String,
     },
     Passthrough {
@@ -41,9 +42,8 @@ pub struct RunWithQueryArgs {
     pub run_id: String,
     pub capture_bytes: usize,
     pub stream_format: String,
+    pub project_id: String,
     pub events_out_tx: Option<EventsOutTx>,
-    pub policy: Option<Arc<dyn PolicyPlugin>>,
-    pub memory: Option<Arc<dyn MemoryPlugin>>,
-    pub gatekeeper: Arc<dyn GatekeeperPlugin>,
+    pub services: Services,
     pub wrapper_start_data: Option<serde_json::Value>,
 }

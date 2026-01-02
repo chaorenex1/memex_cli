@@ -45,6 +45,9 @@ pub struct RunArgs {
     #[arg(long)]
     pub model: Option<String>,
 
+    #[arg(long)]
+    pub model_provider: Option<String>,
+
     /// Task level for scheduling/strategy hints.
     /// - auto: infer from prompt (fast heuristic)
     /// - L0..L3: explicitly set

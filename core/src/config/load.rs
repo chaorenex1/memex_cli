@@ -10,6 +10,11 @@ pub fn get_memex_data_dir() -> anyhow::Result<PathBuf> {
     Ok(PathBuf::from(home).join(".memex"))
 }
 
+pub fn get_memex_env_file_path() -> anyhow::Result<PathBuf> {
+    let memex_dir = get_memex_data_dir()?;
+    Ok(memex_dir.join(".env"))
+}
+
 pub fn load_default() -> anyhow::Result<AppConfig> {
     // Priority 1: ~/.memex/config.toml (highest)
     let memex_dir = get_memex_data_dir()?;
@@ -27,6 +32,8 @@ pub fn load_default() -> anyhow::Result<AppConfig> {
     } else {
         AppConfig::default()
     };
+
+    cfg.env_file = get_memex_env_file_path()?.to_string_lossy().to_string();
 
     // Update events_out path to use memex data directory if using default
     if cfg.events_out.path == "./run.events.jsonl" {

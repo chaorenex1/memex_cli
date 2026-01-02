@@ -20,6 +20,8 @@ pub trait BackendStrategy: Send + Sync {
         resume_id: Option<String>,
         prompt: String,
         model: Option<String>,
+        model_provider: Option<String>,
+        project_id: Option<String>,
         stream_format: &str,
     ) -> Result<BackendPlan>;
 }

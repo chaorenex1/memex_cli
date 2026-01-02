@@ -12,6 +12,8 @@ pub enum PlanMode {
         env_file: Option<String>,
         env: Vec<String>,
         model: Option<String>,
+        model_provider: Option<String>,
+        project_id: Option<String>,
         task_level: Option<String>,
     },
     Legacy {
@@ -40,12 +42,20 @@ pub fn build_runner_spec(
             env_file,
             env,
             model,
+            model_provider,
+            project_id,
             task_level,
         } => {
             if let Some(kind) = backend_kind.as_deref() {
                 if !kind.trim().is_empty() {
                     cfg.backend_kind = kind.to_string();
                 }
+            }
+
+            // Merge envs from config dir .env file.
+            let file_envs = parse_env_file(&cfg.env_file)?;
+            for (k, v) in file_envs {
+                base_envs.insert(k, v);
             }
 
             if let Some(path) = env_file.as_deref() {
@@ -79,6 +89,8 @@ pub fn build_runner_spec(
                     resume_id: req.resume_id,
                     model,
                     stream_format: req.stream_format,
+                    model_provider,
+                    project_id,
                 },
                 start_data,
             ))
