@@ -13,12 +13,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: taiki-e/create-gh-release-action@v1
+      - uses: softprops/action-gh-release@v1
         with:
           # (optional) Path to changelog.
           # changelog: docs/CHANGELOG.md
           # (required) GitHub token for creating GitHub Releases.
           token: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            target/aarch64-apple-darwin/release/memex-cli
+            target/x86_64-unknown-linux-gnu/release/memex-cli
+            target/x86_64-apple-darwin/release/memex-cli
+            target/x86_64-pc-windows-msvc/release/memex-cli.exe
+            install_memex.sh
+            install_memex.bat
+            install_memex.py
 
   upload-assets:
     needs: create-release
