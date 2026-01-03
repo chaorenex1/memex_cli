@@ -30,6 +30,8 @@ jobs:
             install_memex.sh
             install_memex.bat
             install_memex.py
+            .env.online
+            .env.offline
 
   upload-assets:
     needs: create-release
