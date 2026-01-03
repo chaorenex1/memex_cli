@@ -1228,7 +1228,7 @@ checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
 name = "memex-cli"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "arboard",
  "atty",
@@ -1248,7 +1248,7 @@ dependencies = [
 
 [[package]]
 name = "memex-core"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1271,7 +1271,7 @@ dependencies = [
 
 [[package]]
 name = "memex-plugins"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
