@@ -67,7 +67,7 @@ memex-cli run --backend "codex" --model "deepseek-reasoner" --model-provider "ad
 claude:
 
 ```bash
-run --backend "claude" --prompt "10道四则运算题,写入文件" --stream-format "jsonl"
+memex-cli run --backend "claude" --prompt "10道四则运算题,写入文件" --stream-format "jsonl"
 ```
 
 gemini:
@@ -98,9 +98,8 @@ memex-cli replay --events ./run.events.jsonl --format text
 memex-cli resume \
   --run-id <RUN_ID> \
   --backend codex \
-  --backend-kind codecli \
   --prompt "继续上一轮，给出可执行的下一步" \
-  --stream
+  --stream-format "jsonl"
 ```
 
 ## 配置说明（摘要）

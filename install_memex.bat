@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 
 :: Configuration
 set "REPO=chaorenex1/memex-cli"
-set "NAME=memex"
+set "NAME=memex-cli"
 set "INSTALL_DIR=%USERPROFILE%\.local\bin"
 
 :: Filename for Windows: memex-cli-x86_64-pc-windows-msvc.zip

@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 REPO="chaorenex1/memex-cli"
-NAME="memex"
+NAME="memex-cli"
 INSTALL_DIR="$HOME/.local/bin"
 
 # Colors

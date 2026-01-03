@@ -7,7 +7,7 @@ from urllib.request import urlopen, Request
 
 # Configuration
 REPO = "chaorenex1/memex-cli"
-NAME = "memex"
+NAME = "memex-cli"
 
 def main():
     # Detect system
