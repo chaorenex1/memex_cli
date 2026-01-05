@@ -1,0 +1,33 @@
+{
+  "name": "memex-cli",
+  "version": "1.0.0",
+  "description": "CLI shell wrapper with memory, replay, and resume capabilities",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaorenex/memex-cli.git"
+  },
+  "license": "Apache-2.0",
+  "author": "chaorenex1",
+  "bin": {
+    "memex-cli": "bin.js"
+  },
+  "files": [
+    "bin.js"
+  ],
+  "optionalDependencies": {
+    "@memex-cli/darwin-arm64": "1.0.0",
+    "@memex-cli/darwin-x64": "1.0.0",
+    "@memex-cli/linux-x64": "1.0.0",
+    "@memex-cli/win32-x64": "1.0.0"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "keywords": [
+    "cli",
+    "memex",
+    "memory",
+    "replay",
+    "resume"
+  ]
+}

@@ -16,6 +16,7 @@ pub enum TaskLevel {
 }
 
 #[derive(Parser, Debug, Clone)]
+#[command(version)]
 pub struct Args {
     #[command(subcommand)]
     pub command: Option<Commands>,

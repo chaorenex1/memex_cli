@@ -1,0 +1,14 @@
+{
+  "name": "@memex-cli/win32-x64",
+  "version": "1.0.0",
+  "description": "memex-cli binary for Windows x64",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaorenex/memex-cli.git"
+  },
+  "license": "Apache-2.0",
+  "author": "chaorenex1",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": ["memex-cli.exe"]
+}

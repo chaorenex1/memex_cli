@@ -1,0 +1,14 @@
+{
+  "name": "@memex-cli/darwin-arm64",
+  "version": "1.0.0",
+  "description": "memex-cli binary for macOS ARM64",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaorenex/memex-cli.git"
+  },
+  "license": "Apache-2.0",
+  "author": "chaorenex1",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["memex-cli"]
+}

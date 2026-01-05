@@ -1,0 +1,5 @@
+# Binaries are downloaded/built during CI, not committed
+darwin-arm64/memex-cli
+darwin-x64/memex-cli
+linux-x64/memex-cli
+win32-x64/memex-cli.exe

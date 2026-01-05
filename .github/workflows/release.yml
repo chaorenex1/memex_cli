@@ -15,39 +15,124 @@ jobs:
       - uses: actions/checkout@v4
       - uses: taiki-e/create-gh-release-action@v1
         with:
-          # (optional) Path to changelog.
-          # changelog: docs/CHANGELOG.md
-          # (required) GitHub token for creating GitHub Releases.
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  upload-assets:
+  build:
     needs: create-release
     strategy:
       matrix:
         include:
           - target: aarch64-apple-darwin
             os: macos-latest
+            npm-dir: darwin-arm64
+            binary: memex-cli
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            npm-dir: linux-x64
+            binary: memex-cli
           - target: x86_64-apple-darwin
             os: macos-latest
+            npm-dir: darwin-x64
+            binary: memex-cli
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            npm-dir: win32-x64
+            binary: memex-cli.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Install cross-compilation tools
         uses: taiki-e/setup-cross-toolchain-action@v1
         with:
           target: ${{ matrix.target }}
-          runner: none # Skip installation of cross-testing related tools because we only do cross-compilation.
+          runner: none
         if: startsWith(matrix.os, 'ubuntu')
+
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
-          # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
-          # Note that glob pattern is not supported yet.
           bin: memex-cli
-          # (optional) Target triple, default is host triple.
           target: ${{ matrix.target }}
-          # (required) GitHub token for uploading assets to GitHub Releases.
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build release binary
+        run: cargo build -p memex-cli --release --target ${{ matrix.target }}
+
+      - name: Copy binary to npm package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp target/${{ matrix.target }}/release/memex-cli npm/${{ matrix.npm-dir }}/memex-cli
+          chmod +x npm/${{ matrix.npm-dir }}/memex-cli
+
+      - name: Copy binary to npm package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Copy-Item "target\${{ matrix.target }}\release\memex-cli.exe" "npm\${{ matrix.npm-dir }}\memex-cli.exe"
+
+      - name: Upload npm package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-${{ matrix.npm-dir }}
+          path: npm/${{ matrix.npm-dir }}
+
+  publish-npm:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare packages
+        run: |
+          # Copy binaries to npm package directories
+          cp -r artifacts/npm-darwin-arm64/* npm/darwin-arm64/
+          cp -r artifacts/npm-darwin-x64/* npm/darwin-x64/
+          cp -r artifacts/npm-linux-x64/* npm/linux-x64/
+          cp -r artifacts/npm-win32-x64/* npm/win32-x64/
+
+          # Set executable permissions
+          chmod +x npm/darwin-arm64/memex-cli || true
+          chmod +x npm/darwin-x64/memex-cli || true
+          chmod +x npm/linux-x64/memex-cli || true
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update package versions
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          for dir in npm/darwin-arm64 npm/darwin-x64 npm/linux-x64 npm/win32-x64 npm/memex-cli; do
+            jq --arg v "$VERSION" '.version = $v' "$dir/package.json" > "$dir/package.json.tmp"
+            mv "$dir/package.json.tmp" "$dir/package.json"
+          done
+          # Update optionalDependencies versions in main package
+          jq --arg v "$VERSION" '.optionalDependencies = (.optionalDependencies | to_entries | map(.value = $v) | from_entries)' npm/memex-cli/package.json > npm/memex-cli/package.json.tmp
+          mv npm/memex-cli/package.json.tmp npm/memex-cli/package.json
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in npm/darwin-arm64 npm/darwin-x64 npm/linux-x64 npm/win32-x64; do
+            cd $dir
+            npm publish --access public || true
+            cd ../..
+          done
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd npm/memex-cli
+          npm publish --access public
