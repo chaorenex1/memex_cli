@@ -288,7 +288,7 @@ async fn build_plan_request(
                 crate::commands::cli::BackendKind::Aiservice => "aiservice".to_string(),
             });
 
-            if ra.backend == "codex" {
+            if ra.backend == "codex" && ra.model_provider.is_some() {
                 let task_grade_result = infer_task_level(
                     user_query,
                     ra.model.as_deref().unwrap_or(""),
