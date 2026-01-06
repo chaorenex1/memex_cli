@@ -5,6 +5,19 @@ use memex_core::api as core_api;
 
 use crate::runner::codecli::CodeCliRunnerPlugin;
 
+/// 预处理 prompt，将特殊字符转换为安全形式
+/// 使用 JSON 字符串编码，防止被 Windows shell 截断或错误解释
+fn sanitize_prompt(prompt: &str) -> String {
+    // 利用 serde_json 的字符串编码，自动处理所有特殊字符
+    match serde_json::to_string(prompt) {
+        Ok(json) if json.len() >= 2 => {
+            // 去掉首尾引号，保留内部转义
+            json[1..json.len() - 1].to_string()
+        }
+        _ => prompt.to_string(),
+    }
+}
+
 pub struct CodeCliBackendStrategy;
 
 impl core_api::BackendStrategy for CodeCliBackendStrategy {
@@ -23,6 +36,9 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         project_id: Option<String>,
         stream_format: &str,
     ) -> Result<core_api::BackendPlan> {
+        // 预处理 prompt，防止特殊字符被 shell 截断
+        let prompt = sanitize_prompt(&prompt);
+
         let mut args: Vec<String> = Vec::new();
         let envs = base_envs;
         tracing::info!(
@@ -95,8 +111,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             // Always use non-interactive output mode for the wrapper.
             args.push("-p".to_string());
             args.push("--dangerously-skip-permissions".to_string());
-            args.push("--setting-sources".to_string());
-            args.push("".to_string());
+            args.push("--setting-sources=".to_string());
 
             args.push("--output-format".to_string());
             args.push("stream-json".to_string());

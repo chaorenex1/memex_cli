@@ -21,7 +21,13 @@ fn audit_preview(s: &str) -> String {
     if s.len() <= MAX {
         return s.to_string();
     }
-    let mut out = s[..MAX].to_string();
+    let end = s
+        .char_indices()
+        .take_while(|(i, _)| *i < MAX)
+        .last()
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let mut out = s[..end].to_string();
     out.push('…');
     out
 }
@@ -403,7 +409,14 @@ impl StdioSink {
         if s.len() <= MAX {
             return s.to_string();
         }
-        let mut out = s[..MAX].to_string();
+        // 找到不超过 MAX 的最近字符边界
+        let end = s
+            .char_indices()
+            .take_while(|(i, _)| *i < MAX)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
+        let mut out = s[..end].to_string();
         out.push('…');
         out
     }
@@ -486,7 +499,13 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
     }
-    let mut out = s[..max].to_string();
+    let end = s
+        .char_indices()
+        .take_while(|(i, _)| *i < max)
+        .last()
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let mut out = s[..end].to_string();
     out.push('…');
     out
 }

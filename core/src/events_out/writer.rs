@@ -8,7 +8,13 @@ fn audit_preview(s: &str) -> String {
     if s.len() <= MAX {
         return s.to_string();
     }
-    let mut out = s[..MAX].to_string();
+    let end = s
+        .char_indices()
+        .take_while(|(i, _)| *i < MAX)
+        .last()
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let mut out = s[..end].to_string();
     out.push('…');
     out
 }

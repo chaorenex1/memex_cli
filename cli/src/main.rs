@@ -18,8 +18,33 @@ use tracing_subscriber::EnvFilter;
 static LOG_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> =
     std::sync::OnceLock::new();
 
+/// 设置 Windows 控制台为 UTF-8 编码
+#[cfg(windows)]
+fn enable_utf8_console() {
+    use std::ffi::c_uint;
+    const CP_UTF8: c_uint = 65001;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn SetConsoleOutputCP(wCodePageID: c_uint) -> i32;
+        fn SetConsoleCP(wCodePageID: c_uint) -> i32;
+    }
+
+    unsafe {
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
+    }
+}
+
+#[cfg(not(windows))]
+fn enable_utf8_console() {
+    // Unix 系统默认使用 UTF-8，无需设置
+}
+
 #[tokio::main]
 async fn main() {
+    enable_utf8_console();
+
     let exit = match real_main().await {
         Ok(code) => code,
         Err(e) => {

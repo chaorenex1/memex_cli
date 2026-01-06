@@ -29,10 +29,9 @@ impl RunnerPlugin for CodeCliRunnerPlugin {
 
     async fn start_session(&self, args: &RunnerStartArgs) -> Result<Box<dyn RunnerSession>> {
         tracing::info!(
-            "Starting CodeCliRunnerSession: cmd={:?}, args={:?} , envs={:?}",
+            "Starting CodeCliRunnerSession: cmd={:?}, args={:?}",
             args.cmd,
-            args.args,
-            args.envs
+            args.args
         );
         let mut cmd = Command::new(&args.cmd);
         cmd.args(&args.args)
