@@ -1,6 +1,6 @@
 ﻿{
     "name":  "@memex-cli/linux-x64",
-    "version":  "1.0.3",
+    "version":  "1.0.4",
     "description":  "memex-cli binary for Linux x64",
     "repository":  {
                        "type":  "git",
