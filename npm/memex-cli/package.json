@@ -12,8 +12,12 @@
                 "memex-cli":  "bin.js"
             },
     "files":  [
-                  "bin.js"
+                  "bin.js",
+                  "scripts/"
               ],
+    "scripts":  {
+                    "postinstall":  "node -e \"console.log('\\n💡 Tip: memex-env scripts available in node_modules/memex-cli/scripts/\\n')\""
+                },
     "optionalDependencies":  {
                                  "@memex-cli/darwin-arm64":  "1.0.4",
                                  "@memex-cli/darwin-x64":  "1.0.4",

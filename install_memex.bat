@@ -86,6 +86,37 @@ if %errorlevel% neq 0 (
 )
 echo [OK] Installed: %TARGET%
 
+:: Install memex-env scripts (optional)
+echo.
+echo [INFO] Installing memex-env scripts...
+set "SCRIPTS_URL=https://github.com/%REPO%/releases/download/%VERSION%/memex-env-scripts.zip"
+set "SCRIPTS_ARCHIVE=%TMP%\memex-env-scripts.zip"
+
+powershell -Command "try { Invoke-WebRequest -Uri '%SCRIPTS_URL%' -OutFile '%SCRIPTS_ARCHIVE%' -ErrorAction Stop } catch { exit 1 }" 2>nul
+if %errorlevel% equ 0 (
+    echo [INFO] Extracting memex-env scripts...
+    powershell -Command "Expand-Archive -Path '%SCRIPTS_ARCHIVE%' -DestinationPath '%TMP%' -Force" 2>nul
+    if %errorlevel% equ 0 (
+        set "INSTALLED_SCRIPTS=0"
+        for %%f in ("%TMP%\scripts\memex-env.*") do (
+            if exist "%%f" (
+                copy /y "%%f" "%INSTALL_DIR%\" >nul
+                echo [OK] Installed: %INSTALL_DIR%\%%~nxf
+                set /a INSTALLED_SCRIPTS+=1
+            )
+        )
+        if !INSTALLED_SCRIPTS! equ 0 (
+            echo [WARN] No memex-env scripts found in archive
+        )
+    ) else (
+        echo [WARN] Failed to extract memex-env scripts
+        echo [INFO] Continuing without memex-env scripts...
+    )
+) else (
+    echo [INFO] memex-env scripts not available in this release
+    echo [INFO] Continuing with main installation...
+)
+
 :: Update PATH
 echo %PATH% | findstr /i "%INSTALL_DIR%" >nul
 if %errorlevel% neq 0 (

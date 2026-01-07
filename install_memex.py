@@ -1,13 +1,87 @@
 #!/usr/bin/env python3
 """Cross-platform installer for memex-cli from GitHub releases"""
 
-import os, sys, platform, tempfile, shutil, tarfile, zipfile, json, stat
+import os, sys, platform, tempfile, shutil, tarfile, zipfile, json, stat, time
 from pathlib import Path
 from urllib.request import urlopen, Request
+from urllib.error import HTTPError
 
 # Configuration
 REPO = "chaorenex1/memex-cli"
 NAME = "memex-cli"
+
+def download_optional_asset(url, dest, asset_name, max_retries=2):
+    """Download optional asset with retry logic"""
+    for attempt in range(max_retries):
+        try:
+            print(f"[INFO] Downloading {asset_name} (attempt {attempt + 1}/{max_retries})...")
+            data = urlopen(Request(url, headers={"User-Agent": "installer"}), timeout=30).read()
+            dest.write_bytes(data)
+            print(f"[OK] {asset_name} downloaded")
+            return True
+        except HTTPError as e:
+            if e.code == 404:
+                print(f"[INFO] {asset_name} not available in this release")
+                return False
+            if attempt == max_retries - 1:
+                print(f"[WARN] Failed to download {asset_name}: {e}")
+                return False
+            time.sleep(2 ** attempt)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"[WARN] Failed to download {asset_name}: {e}")
+                return False
+            time.sleep(2 ** attempt)
+    return False
+
+def install_memex_env_scripts(tmp_dir, install_dir, version, system):
+    """Download and install memex-env scripts (optional)"""
+    try:
+        # Determine archive format
+        ext = "zip" if system == "windows" else "tar.gz"
+        filename = f"memex-env-scripts.{ext}"
+        url = f"https://github.com/{REPO}/releases/download/{version}/{filename}"
+
+        archive_path = tmp_dir / filename
+
+        # Download scripts archive (optional, non-blocking)
+        if not download_optional_asset(url, archive_path, "memex-env scripts"):
+            print("[INFO] Continuing without memex-env scripts...")
+            return []
+
+        # Extract scripts
+        print("[INFO] Extracting memex-env scripts...")
+        if ext == "zip":
+            with zipfile.ZipFile(archive_path) as z:
+                z.extractall(tmp_dir)
+        else:
+            with tarfile.open(archive_path, "r:gz") as t:
+                t.extractall(tmp_dir)
+
+        # Find and install scripts
+        scripts_dir = tmp_dir / "scripts"
+        if not scripts_dir.exists():
+            print("[WARN] Scripts directory not found in archive")
+            return []
+
+        installed_scripts = []
+        for script in scripts_dir.glob("memex-env.*"):
+            target = install_dir / script.name
+            shutil.copy2(script, target)
+
+            # Set executable permission for .sh files
+            if script.suffix == ".sh" and system != "windows":
+                target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+            installed_scripts.append(target)
+            print(f"[OK] Installed: {target}")
+
+        return installed_scripts
+
+    except Exception as e:
+        print(f"[WARN] Failed to install memex-env scripts: {e}")
+        print("[INFO] Main program installation will continue...")
+        return []
 
 def main():
     # Detect system
@@ -110,9 +184,13 @@ def main():
         shutil.copy2(binary, target)
         if system != "windows":
             target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        
+
         print(f"[OK] Installed: {target}")
-        
+
+        # Install memex-env scripts (optional)
+        print("\n[INFO] Installing memex-env scripts...")
+        install_memex_env_scripts(Path(TMP), install_dir, VERSION, system)
+
         # Update PATH
         if str(install_dir) not in os.environ.get("PATH", ""):
             if system == "windows":

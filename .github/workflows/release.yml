@@ -69,6 +69,23 @@ jobs:
         run: |
           Copy-Item "target\${{ matrix.target }}\release\memex-cli.exe" "npm\${{ matrix.npm-dir }}\memex-cli.exe"
 
+      - name: Copy memex-env scripts to npm package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p npm/${{ matrix.npm-dir }}/scripts
+          cp memex-env.sh npm/${{ matrix.npm-dir }}/scripts/
+          cp memex-env.ps1 npm/${{ matrix.npm-dir }}/scripts/
+          cp memex-env.bat npm/${{ matrix.npm-dir }}/scripts/
+          chmod +x npm/${{ matrix.npm-dir }}/scripts/memex-env.sh
+
+      - name: Copy memex-env scripts to npm package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -Path "npm\${{ matrix.npm-dir }}\scripts" -ItemType Directory -Force | Out-Null
+          Copy-Item "memex-env.sh" "npm\${{ matrix.npm-dir }}\scripts\"
+          Copy-Item "memex-env.ps1" "npm\${{ matrix.npm-dir }}\scripts\"
+          Copy-Item "memex-env.bat" "npm\${{ matrix.npm-dir }}\scripts\"
+
       - name: Upload npm package artifact
         uses: actions/upload-artifact@v4
         with:
@@ -136,3 +153,20 @@ jobs:
         run: |
           cd npm/memex-cli
           npm publish --access public
+
+      - name: Package memex-env scripts for release
+        run: |
+          mkdir -p release-artifacts/scripts
+          cp memex-env.sh memex-env.ps1 memex-env.bat release-artifacts/scripts/
+          cd release-artifacts
+          tar -czf memex-env-scripts.tar.gz scripts/
+          zip -r memex-env-scripts.zip scripts/
+
+      - name: Upload memex-env scripts to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-artifacts/memex-env-scripts.tar.gz
+            release-artifacts/memex-env-scripts.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

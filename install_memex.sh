@@ -86,6 +86,38 @@ cp "$BIN" "$INSTALL_DIR/$NAME"
 chmod +x "$INSTALL_DIR/$NAME"
 ok "Installed: $INSTALL_DIR/$NAME"
 
+# Install memex-env scripts (optional)
+echo ""
+info "Installing memex-env scripts..."
+SCRIPTS_URL="https://github.com/$REPO/releases/download/$VERSION/memex-env-scripts.tar.gz"
+SCRIPTS_ARCHIVE="$TMP/memex-env-scripts.tar.gz"
+
+if curl -fsSL "$SCRIPTS_URL" -o "$SCRIPTS_ARCHIVE" 2>/dev/null; then
+    cd "$TMP"
+    if tar -xzf "$SCRIPTS_ARCHIVE" 2>/dev/null; then
+        INSTALLED_SCRIPTS=0
+        for script in scripts/memex-env.*; do
+            if [ -f "$script" ]; then
+                cp "$script" "$INSTALL_DIR/$(basename $script)"
+                if [[ "$script" == *.sh ]]; then
+                    chmod +x "$INSTALL_DIR/$(basename $script)"
+                fi
+                ok "Installed: $INSTALL_DIR/$(basename $script)"
+                ((INSTALLED_SCRIPTS++))
+            fi
+        done
+        if [ $INSTALLED_SCRIPTS -eq 0 ]; then
+            warn "No memex-env scripts found in archive"
+        fi
+    else
+        warn "Failed to extract memex-env scripts"
+        info "Continuing without memex-env scripts..."
+    fi
+else
+    info "memex-env scripts not available in this release"
+    info "Continuing with main installation..."
+fi
+
 # Update PATH if needed
 if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     RC="$HOME/.bashrc"
