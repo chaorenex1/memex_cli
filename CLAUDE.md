@@ -49,7 +49,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 - `cli/src/main.rs` - Binary entry point, argument parsing, command dispatch
 - `cli/src/app.rs` - Application orchestration, config merging, TUI/standard flow selection
-- `cli/src/commands/cli.rs` - CLI argument definitions (RunArgs, ReplayArgs, ResumeArgs)
+- `cli/src/commands/cli.rs` - CLI argument definitions (RunArgs, ReplayArgs, ResumeArgs, SearchArgs, RecordCandidateArgs, RecordHitArgs, RecordSessionArgs)
+- `cli/src/commands/memory.rs` - Memory service CLI command handlers (search, record-candidate, record-hit, record-session)
 - `core/src/api.rs` - Public API re-exports
 - `core/src/engine/run.rs` - Main execution orchestration
 - `plugins/src/factory.rs` - Plugin instantiation (memory, runner, policy, gatekeeper, backend)
@@ -116,8 +117,9 @@ Key crates: tokio, clap (derive), serde/serde_json, tracing, reqwest, ratatui/cr
 
 ### Adding a new command
 1. Add command struct in `cli/src/commands/cli.rs`
-2. Add dispatch case in `cli/src/main.rs`
-3. Implement handler in `cli/src/app.rs` or new module
+2. Add command to `Commands` enum in `cli/src/commands/cli.rs`
+3. Add dispatch case in `cli/src/main.rs`
+4. Implement handler in `cli/src/app.rs` or new module (e.g., `cli/src/commands/memory.rs` for memory service commands)
 
 ### Modifying configuration
 1. Update types in `core/src/config/types.rs`
