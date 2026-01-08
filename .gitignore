@@ -18,3 +18,8 @@ target/
 
 *.sqlite
 *.sqlite-*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
