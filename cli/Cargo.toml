@@ -1,6 +1,6 @@
 ﻿[package]
 name = "memex-cli"
-version = "1.0.5-alpha.1"
+version = "1.0.5-alpha.2"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
@@ -8,20 +8,46 @@ description = "Core logic for CodeCLI powered by Memex"
 repository = "https://github.com/chaorenex/memex-cli"
 
 [dependencies]
-memex-core = { workspace = true}
-memex-plugins = { workspace = true}
-tokio = { workspace = true}
-clap = { workspace = true}
-serde_json = { workspace = true}
-tracing = { workspace = true}
-tracing-subscriber = { workspace = true}
-chrono = { workspace = true}
-uuid = { workspace = true}
-tracing-appender = { workspace = true}
-ratatui = { workspace = true}
-crossterm = { workspace = true}
-atty = { workspace = true}
-arboard = "3.4"
+# Workspace members
+memex-core = { workspace = true }
+memex-plugins = { workspace = true }
+
+# Core runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+
+# Logging & tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+
+# Time & UUID
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+# TUI (Terminal UI)
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+atty = { workspace = true }
+
+# HTTP server
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# System utilities
+arboard = { workspace = true }
+dirs = { workspace = true }
 
 [lints]
 workspace = true

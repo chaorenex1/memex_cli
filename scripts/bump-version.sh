@@ -13,6 +13,10 @@ echo "Updating version to $VERSION..."
 
 # Update cli/Cargo.toml (only the package version, not dependencies)
 sed -i.bak '0,/^version = /s/^version = ".*"/version = "'"$VERSION"'"/' cli/Cargo.toml && rm cli/Cargo.toml.bak
+# Update core/Cargo.toml (only the package version, not dependencies)
+sed -i.bak '0,/^version = /s/^version = ".*"/version = "'"$VERSION"'"/' core/Cargo.toml && rm core/Cargo.toml.bak
+# Update plugins/Cargo.toml (only the package version, not dependencies)
+sed -i.bak '0,/^version = /s/^version = ".*"/version = "'"$VERSION"'"/' plugins/Cargo.toml && rm plugins/Cargo.toml.bak
 
 # Update all npm package.json files
 for dir in npm/memex-cli npm/darwin-arm64 npm/darwin-x64 npm/linux-x64 npm/win32-x64; do

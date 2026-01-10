@@ -21,6 +21,34 @@ $newLines = $lines | ForEach-Object {
 }
 $newLines | Set-Content $cliCargoPath -Encoding UTF8
 
+# Update core/Cargo.toml (only first occurrence - package version)
+$coreCargoPath = "core/Cargo.toml"
+$lines = Get-Content $coreCargoPath
+$updated = $false
+$newLines = $lines | ForEach-Object {
+    if (-not $updated -and $_ -match '^version = ') {
+        $updated = $true
+        "version = `"$Version`""
+    } else {
+        $_
+    }
+}
+$newLines | Set-Content $coreCargoPath -Encoding UTF8
+
+# Update plugins/Cargo.toml (only first occurrence - package version)
+$pluginsCargoPath = "plugins/Cargo.toml"
+$lines = Get-Content $pluginsCargoPath
+$updated = $false
+$newLines = $lines | ForEach-Object {
+    if (-not $updated -and $_ -match '^version = ') {
+        $updated = $true
+        "version = `"$Version`""
+    } else {
+        $_
+    }
+}
+$newLines | Set-Content $pluginsCargoPath -Encoding UTF8
+
 # Update all npm package.json files
 $npmDirs = @("npm/memex-cli", "npm/darwin-arm64", "npm/darwin-x64", "npm/linux-x64", "npm/win32-x64")
 
