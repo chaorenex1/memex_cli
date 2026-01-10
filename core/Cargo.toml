@@ -1,6 +1,6 @@
-[package]
+﻿[package]
 name = "memex-core"
-version = "1.0.0"
+version = "1.0.5-alpha.2"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
@@ -8,25 +8,52 @@ description = "Core logic for CodeCLI powered by Memex"
 repository = "https://github.com/chaorenex/memex-cli"
 
 [dependencies]
-tokio = { workspace = true}
-serde = { workspace = true}
-serde_json = { workspace = true}
-thiserror = { workspace = true}
-tracing = { workspace = true}
-anyhow = { workspace = true}
-async-trait = { workspace = true}
-reqwest = { workspace = true}
-chrono =   { workspace = true}
-toml = { workspace = true}
-regex = { workspace = true}
-uuid = { workspace = true}
+# Core runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Time & UUID
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+# Text & regex
+regex = { workspace = true }
+
+# File operations
+base64 = { workspace = true }
+glob = { workspace = true }
+
+# Performance optimization (Level 2-3)
+sysinfo = { workspace = true }
+lru = { workspace = true }
+memmap2 = { workspace = true }
+lazy_static = { workspace = true }
+num_cpus = { workspace = true }
 
 [dev-dependencies]
-tokio-test = { workspace = true}
-tempfile = { workspace = true}
-mockito = { workspace = true}
-pretty_assertions = { workspace = true}
-tracing-subscriber = { workspace = true}
+tokio-test = { workspace = true }
+tempfile = { workspace = true }
+mockito = { workspace = true }
+pretty_assertions = { workspace = true }
+tracing-subscriber = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "stdio_perf"
+harness = false
 
 [lints]
 workspace = true

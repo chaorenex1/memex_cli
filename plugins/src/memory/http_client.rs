@@ -1,15 +1,14 @@
+use memex_core::api as core_api;
 use serde_json::Value;
 
-use super::models::{QACandidatePayload, QAHitsPayload, QASearchPayload, QAValidationPayload};
-
 #[derive(Clone)]
-pub struct MemoryClient {
+pub struct HttpClient {
     base_url: String,
     api_key: String,
     http: reqwest::Client,
 }
 
-impl MemoryClient {
+impl HttpClient {
     pub fn new(base_url: String, api_key: String, timeout_ms: u64) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_millis(timeout_ms))
@@ -29,7 +28,10 @@ impl MemoryClient {
         }
     }
 
-    pub async fn search(&self, payload: QASearchPayload) -> anyhow::Result<Value> {
+    pub async fn search(
+        &self,
+        payload: core_api::QASearchPayload,
+    ) -> anyhow::Result<Value> {
         let url = format!("{}/v1/qa/search", self.base_url.trim_end_matches('/'));
         tracing::debug!(
             target: "memex.qa",
@@ -52,7 +54,10 @@ impl MemoryClient {
         Ok(v)
     }
 
-    pub async fn send_hit(&self, payload: QAHitsPayload) -> anyhow::Result<Value> {
+    pub async fn send_hit(
+        &self,
+        payload: core_api::QAHitsPayload,
+    ) -> anyhow::Result<Value> {
         let url = format!("{}/v1/qa/hit", self.base_url.trim_end_matches('/'));
         let used = payload
             .references
@@ -81,7 +86,10 @@ impl MemoryClient {
         Ok(v)
     }
 
-    pub async fn send_candidate(&self, payload: QACandidatePayload) -> anyhow::Result<Value> {
+    pub async fn send_candidate(
+        &self,
+        payload: core_api::QACandidatePayload,
+    ) -> anyhow::Result<Value> {
         let url = format!("{}/v1/qa/candidates", self.base_url.trim_end_matches('/'));
         tracing::debug!(
             target: "memex.qa",
@@ -102,7 +110,10 @@ impl MemoryClient {
         Ok(v)
     }
 
-    pub async fn send_validate(&self, payload: QAValidationPayload) -> anyhow::Result<Value> {
+    pub async fn send_validate(
+        &self,
+        payload: core_api::QAValidationPayload,
+    ) -> anyhow::Result<Value> {
         let url: String = format!("{}/v1/qa/validate", self.base_url.trim_end_matches('/'));
         tracing::debug!(
             target: "memex.qa",

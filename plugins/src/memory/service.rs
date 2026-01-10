@@ -1,15 +1,16 @@
+use super::http_client::HttpClient;
 use super::r#trait::MemoryPlugin;
 use anyhow::Result;
 use async_trait::async_trait;
 use memex_core::api as core_api;
 
 pub struct MemoryServicePlugin {
-    client: core_api::MemoryClient,
+    client: HttpClient,
 }
 
 impl MemoryServicePlugin {
     pub fn new(base_url: String, api_key: String, timeout_ms: u64) -> Result<Self> {
-        let client = core_api::MemoryClient::new(base_url, api_key, timeout_ms)?;
+        let client = HttpClient::new(base_url, api_key, timeout_ms)?;
         Ok(Self { client })
     }
 }
