@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::Local;
 use lazy_static::lazy_static;
 use serde::Serialize;
 use std::sync::Mutex;
@@ -227,7 +227,7 @@ pub fn emit_task_start_jsonl(run_id: &str, info: &RenderTaskInfo) {
     emit_json(&JsonlEvent {
         v: 1,
         event_type: "task.start".into(),
-        ts: Utc::now().to_rfc3339(),
+        ts: Local::now().to_rfc3339(),
         run_id: run_id.to_string(),
         task_id: Some(info.task_id.clone()),
         action: None,
@@ -254,7 +254,7 @@ pub fn emit_task_end_jsonl(
     emit_json(&JsonlEvent {
         v: 1,
         event_type: "task.end".into(),
-        ts: Utc::now().to_rfc3339(),
+        ts: Local::now().to_rfc3339(),
         run_id: run_id.to_string(),
         task_id: Some(info.task_id.clone()),
         action: None,
@@ -286,7 +286,7 @@ pub async fn render_task_jsonl_events(
                 emit_json(&JsonlEvent {
                     v: 1,
                     event_type: "assistant.output".into(),
-                    ts: Utc::now().to_rfc3339(),
+                    ts: Local::now().to_rfc3339(),
                     run_id: run_id.to_string(),
                     task_id: Some(info.task_id.clone()),
                     action: None,
@@ -302,7 +302,7 @@ pub async fn render_task_jsonl_events(
                 "tool.request" => emit_json(&JsonlEvent {
                     v: 1,
                     event_type: "tool.call".into(),
-                    ts: Utc::now().to_rfc3339(),
+                    ts: Local::now().to_rfc3339(),
                     run_id: run_id.to_string(),
                     task_id: Some(info.task_id.clone()),
                     action: tool.action.clone(),
@@ -316,7 +316,7 @@ pub async fn render_task_jsonl_events(
                 "tool.result" => emit_json(&JsonlEvent {
                     v: 1,
                     event_type: "tool.result".into(),
-                    ts: Utc::now().to_rfc3339(),
+                    ts: Local::now().to_rfc3339(),
                     run_id: run_id.to_string(),
                     task_id: Some(info.task_id.clone()),
                     action: tool.action.clone(),
@@ -336,7 +336,7 @@ pub async fn render_task_jsonl_events(
                         emit_json(&JsonlEvent {
                             v: 1,
                             event_type: "assistant.output".into(),
-                            ts: Utc::now().to_rfc3339(),
+                            ts: Local::now().to_rfc3339(),
                             run_id: run_id.to_string(),
                             task_id: Some(info.task_id.clone()),
                             action: None,
@@ -354,7 +354,7 @@ pub async fn render_task_jsonl_events(
                         emit_json(&JsonlEvent {
                             v: 1,
                             event_type: "assistant.thinking".into(),
-                            ts: Utc::now().to_rfc3339(),
+                            ts: Local::now().to_rfc3339(),
                             run_id: run_id.to_string(),
                             task_id: Some(info.task_id.clone()),
                             action: None,
@@ -370,7 +370,7 @@ pub async fn render_task_jsonl_events(
                 "assistant.action" => emit_json(&JsonlEvent {
                     v: 1,
                     event_type: "assistant.action".into(),
-                    ts: Utc::now().to_rfc3339(),
+                    ts: Local::now().to_rfc3339(),
                     run_id: run_id.to_string(),
                     task_id: Some(info.task_id.clone()),
                     action: tool.action.clone(),
@@ -390,7 +390,7 @@ pub async fn render_task_jsonl_events(
                         emit_json(&JsonlEvent {
                             v: 1,
                             event_type: "info".into(),
-                            ts: Utc::now().to_rfc3339(),
+                            ts: Local::now().to_rfc3339(),
                             run_id: run_id.to_string(),
                             task_id: Some(info.task_id.clone()),
                             action: None,
@@ -408,7 +408,7 @@ pub async fn render_task_jsonl_events(
                         emit_json(&JsonlEvent {
                             v: 1,
                             event_type: "debug".into(),
-                            ts: Utc::now().to_rfc3339(),
+                            ts: Local::now().to_rfc3339(),
                             run_id: run_id.to_string(),
                             task_id: Some(info.task_id.clone()),
                             action: None,
@@ -426,7 +426,7 @@ pub async fn render_task_jsonl_events(
             RunnerEvent::RawStdout(line) => emit_json(&JsonlEvent {
                 v: 1,
                 event_type: "assistant.output".into(),
-                ts: Utc::now().to_rfc3339(),
+                ts: Local::now().to_rfc3339(),
                 run_id: run_id.to_string(),
                 task_id: Some(info.task_id.clone()),
                 action: None,
@@ -440,7 +440,7 @@ pub async fn render_task_jsonl_events(
             RunnerEvent::RawStderr(line) => emit_json(&JsonlEvent {
                 v: 1,
                 event_type: "warning".into(),
-                ts: Utc::now().to_rfc3339(),
+                ts: Local::now().to_rfc3339(),
                 run_id: run_id.to_string(),
                 task_id: Some(info.task_id.clone()),
                 action: None,
@@ -460,7 +460,7 @@ pub async fn render_task_jsonl_events(
                 emit_json(&JsonlEvent {
                     v: 1,
                     event_type: "error".into(),
-                    ts: Utc::now().to_rfc3339(),
+                    ts: Local::now().to_rfc3339(),
                     run_id: run_id.to_string(),
                     task_id: Some(info.task_id.clone()),
                     action: None,
@@ -549,47 +549,6 @@ pub async fn render_task_stream(
     }
 }
 
-pub async fn render_task_stream_content_only(
-    mut rx: UnboundedReceiver<RunnerEvent>,
-) -> RenderOutcome {
-    let started = std::time::Instant::now();
-    let mut exit_code = 0;
-    let mut saw_complete = false;
-    while let Some(ev) = rx.recv().await {
-        match ev {
-            RunnerEvent::AssistantOutput(text) => println!("{text}"),
-            RunnerEvent::ToolEvent(tool) => {
-                if tool.event_type == "assistant.output" {
-                    if let Some(v) = tool.output.as_ref().and_then(|v| v.as_str()) {
-                        if !v.is_empty() {
-                            println!("{v}");
-                        }
-                    }
-                }
-            }
-            RunnerEvent::RawStdout(line) => println!("{line}"),
-            RunnerEvent::RawStderr(_) => {}
-            RunnerEvent::RunComplete { exit_code: code } => {
-                exit_code = code;
-                saw_complete = true;
-            }
-            RunnerEvent::Error(_) => {
-                exit_code = 1;
-            }
-            RunnerEvent::StatusUpdate { .. } => {}
-        }
-    }
-
-    if !saw_complete {
-        exit_code = 1;
-    }
-    let duration_ms = Some(started.elapsed().as_millis() as u64);
-    RenderOutcome {
-        exit_code,
-        duration_ms,
-    }
-}
-
 pub fn emit_json(ev: &JsonlEvent) {
     // Level 2.1: 根据全局配置选择输出方式（批量化 vs 直接输出）
     let enable_buffering = BUFFERING_ENABLED
@@ -605,12 +564,5 @@ pub fn emit_json(ev: &JsonlEvent) {
         if let Ok(line) = serde_json::to_string(ev) {
             println!("{line}");
         }
-    }
-}
-
-pub fn format_backend(backend: &str, model: Option<&str>) -> String {
-    match model {
-        Some(m) if !m.trim().is_empty() => format!("{}/{}", backend, m),
-        _ => backend.to_string(),
     }
 }
