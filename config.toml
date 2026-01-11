@@ -129,3 +129,34 @@ enable_file_cache = false            # File cache (default off to avoid memory u
 file_cache_size = 100                # Cache entries count
 enable_mmap_large_files = true       # Use mmap for large files (Level 3.1)
 mmap_threshold_mb = 10               # mmap threshold (MB)
+
+[executor]
+# Default values (defined in core/src/executor/types/config.rs)
+
+[executor.file_processing]
+enabled = true
+enable_mmap = true
+mmap_threshold_mb = 10
+enable_cache = true
+cache_size = 100
+max_files = 100
+max_total_size_mb = 200
+
+[executor.output]
+format = "jsonl"       # or "text"
+pretty_print = false
+ascii_only = false
+
+[executor.retry]
+strategy = "exponential-backoff"
+base_delay_ms = 100
+max_delay_ms = 5000
+max_attempts = 3
+
+[executor.concurrency]
+strategy = "adaptive"
+min_concurrency = 2
+max_concurrency = 32
+base_concurrency = 8
+cpu_threshold_low = 50.0
+cpu_threshold_high = 80.0

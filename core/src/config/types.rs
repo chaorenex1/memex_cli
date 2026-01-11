@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+use crate::executor::types::ExecutionConfig;
+
 /// Backend execution strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -75,6 +77,9 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub stdio: StdioConfig,
+
+    #[serde(default)]
+    pub executor: ExecutionConfig,
 }
 
 fn default_env_file() -> String {
@@ -98,6 +103,7 @@ impl Default for AppConfig {
             gatekeeper: GatekeeperConfig::default(),
             http_server: HttpServerConfig::default(),
             stdio: StdioConfig::default(),
+            executor: ExecutionConfig::default(),
         }
     }
 }
@@ -797,7 +803,14 @@ pub struct StdioConfig {
 }
 
 fn default_max_parallel_tasks() -> usize {
-    4
+    // Tiered default based on CPU count (Strategy C)
+    let cpu_count = num_cpus::get();
+    match cpu_count {
+        1..=2 => 2,             // Low-end devices
+        3..=8 => cpu_count / 2, // Personal computers
+        9..=16 => 6,            // Workstations
+        _ => 8,                 // Servers (cap to avoid overload)
+    }
 }
 
 fn default_enable_adaptive_concurrency() -> bool {

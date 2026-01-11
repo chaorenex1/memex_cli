@@ -13,7 +13,7 @@ memex-plugins = { path = "plugins" }
 memex-cli = { path = "cli" }
 
 # Core async runtime
-tokio = { version = "^1.37", features = ["process", "io-util", "macros", "signal", "rt-multi-thread", "io-std", "fs"] }
+tokio = { version = "^1.37", features = ["process", "io-util", "macros", "signal", "rt-multi-thread", "io-std", "fs", "sync", "time"] }
 futures = "^0.3"
 async-trait = "^0.1"
 
@@ -49,6 +49,7 @@ regex = "^1.10"
 ratatui = "0.28"
 crossterm = "0.28"
 atty = "0.2"
+indicatif = "0.17"  # Progress bars
 
 # HTTP server (CLI specific)
 axum = "0.7"

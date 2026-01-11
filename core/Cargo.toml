@@ -32,6 +32,9 @@ uuid = { workspace = true }
 # Text & regex
 regex = { workspace = true }
 
+# Progress indicators
+indicatif = { workspace = true }
+
 # File operations
 base64 = { workspace = true }
 glob = { workspace = true }
