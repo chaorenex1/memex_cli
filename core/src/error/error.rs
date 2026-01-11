@@ -29,4 +29,6 @@ pub enum RunnerError {
     },
     #[error("plugin error: {0}")]
     Plugin(#[from] anyhow::Error),
+    #[error("stdio execution error: {0}")]
+    Stdio(String),
 }
