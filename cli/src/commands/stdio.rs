@@ -2,6 +2,7 @@ use std::fs;
 use std::io::Read;
 
 use memex_core::api as core_api;
+use memex_plugins::factory;
 use memex_plugins::plan::{build_runner_spec, PlanMode, PlanRequest};
 use uuid::Uuid;
 
@@ -69,21 +70,37 @@ pub async fn handle_stdio(
         t.stream_format = args.stream_format.clone();
     }
 
-    let exec_args = core_api::StdioRunOpts {
+    // ===== 新执行器调用开始 =====
+
+    // 配置STDIO事件缓冲（减少JSONL输出系统调用）
+    core_api::configure_event_buffer(
+        ctx.cfg().stdio.enable_event_buffering,
+        ctx.cfg().stdio.event_buffer_size,
+        ctx.cfg().stdio.event_flush_interval_ms,
+    );
+
+    // 构建StdioRunOpts
+    let stdio_opts = core_api::StdioRunOpts {
         stream_format: args.stream_format.clone(),
         ascii: args.ascii,
         verbose: args.verbose,
         quiet: args.quiet,
         capture_bytes,
         resume_run_id: args.run_id.clone(),
-        resume_context,
+        resume_context: resume_context.clone(),
     };
 
-    let planner = |task: &core_api::StdioTask| -> Result<
+    // 构建ExecutionOpts（从StdioConfig扩展STDIO优化配置）
+    let exec_opts = core_api::ExecutionOpts::from_stdio_config(&stdio_opts, &ctx.cfg().stdio);
+
+    // 定义planner（构建RunnerSpec）
+    // 使用Arc包装ctx以使闭包可Clone
+    let ctx_for_planner = std::sync::Arc::new(ctx.clone());
+    let planner = move |task: &core_api::StdioTask| -> Result<
         (core_api::RunnerSpec, Option<serde_json::Value>),
         core_api::StdioError,
     > {
-        let mut cfg = ctx.cfg().clone();
+        let mut cfg = ctx_for_planner.cfg().clone();
         let plan_req = PlanRequest {
             mode: PlanMode::Backend {
                 backend_spec: task.backend.clone(),
@@ -103,14 +120,61 @@ pub async fn handle_stdio(
         Ok((runner_spec, start_data))
     };
 
-    match core_api::run_stdio(tasks, ctx, &exec_args, planner).await {
-        Ok(code) => Ok(code),
-        Err(e) => {
-            let code = e.error_code().as_u16() as i32;
-            emit_stdio_error(&args, &e, Some(Uuid::new_v4().to_string()));
-            Ok(code)
+    // 构建插件（通过 factory）
+    let processors = factory::build_task_processors(&ctx.cfg().executor);
+    let renderer = factory::build_renderer(&args.stream_format, &ctx.cfg().executor.output);
+    let retry_strategy = factory::build_retry_strategy(&ctx.cfg().executor.retry);
+    let concurrency_strategy =
+        factory::build_concurrency_strategy(&ctx.cfg().executor.concurrency);
+
+    // 注入resume上下文到第一个任务
+    if let Some(ctx_str) = &resume_context {
+        if !ctx_str.is_empty() && !tasks.is_empty() {
+            tasks[0].content = format!("{}{}", ctx_str, tasks[0].content);
         }
     }
+
+    // 执行任务（使用新执行器）
+    let engine = core_api::ExecutionEngine::builder(ctx, &exec_opts)
+        .processors(processors)
+        .renderer(renderer)
+        .retry_strategy(retry_strategy)
+        .concurrency_strategy(concurrency_strategy)
+        .build();
+
+    let result = match engine.execute_tasks(tasks, planner).await {
+        Ok(result) => {
+            // 刷新STDIO事件缓冲
+            core_api::flush_event_buffer();
+
+            // 计算退出码
+            let exit_code = if result.failed > 0 {
+                result
+                    .task_results
+                    .values()
+                    .find(|r| r.exit_code != 0)
+                    .map(|r| r.exit_code)
+                    .unwrap_or(1)
+            } else {
+                0
+            };
+            Ok(exit_code)
+        }
+        Err(e) => {
+            // 刷新STDIO事件缓冲
+            core_api::flush_event_buffer();
+
+            // 转换ExecutorError为StdioError
+            let stdio_err = core_api::StdioError::RunnerError(e.to_string());
+            let code = stdio_err.error_code().as_u16() as i32;
+            emit_stdio_error(&args, &stdio_err, None);
+            Ok(code)
+        }
+    };
+
+    result
+
+    // ===== 新执行器调用结束 =====
 }
 
 fn load_resume_context(events_file: &str, run_id: &str) -> Result<String, String> {
@@ -180,7 +244,7 @@ fn emit_stdio_error(args: &StdioArgs, err: &core_api::StdioError, run_id: Option
         let ev = core_api::JsonlEvent {
             v: 1,
             event_type: "error".to_string(),
-            ts: chrono::Utc::now().to_rfc3339(),
+            ts: chrono::Local::now().to_rfc3339(),
             run_id: id,
             task_id: None,
             action: None,
@@ -196,7 +260,7 @@ fn emit_stdio_error(args: &StdioArgs, err: &core_api::StdioError, run_id: Option
         let end = core_api::JsonlEvent {
             v: 1,
             event_type: "run.end".to_string(),
-            ts: chrono::Utc::now().to_rfc3339(),
+            ts: chrono::Local::now().to_rfc3339(),
             run_id: ev.run_id.clone(),
             task_id: None,
             action: None,

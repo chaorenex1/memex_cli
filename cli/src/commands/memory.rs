@@ -1,5 +1,7 @@
 //! Memory service CLI commands implementation
-use crate::commands::cli::{RecordCandidateArgs, RecordHitArgs, RecordSessionArgs, SearchArgs};
+use crate::commands::cli::{
+    RecordCandidateArgs, RecordHitArgs, RecordSessionArgs, RecordValidationArgs, SearchArgs,
+};
 use memex_core::api as core_api;
 use serde_json::json;
 
@@ -214,6 +216,65 @@ pub async fn handle_record_hit(
     let output = json!({
         "success": true,
         "recorded_count": used_ids.len()
+    });
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+
+    Ok(())
+}
+
+/// Handle record-validation command
+pub async fn handle_record_validation(
+    args: RecordValidationArgs,
+    ctx: &core_api::AppContext,
+) -> Result<(), core_api::CliError> {
+    let cfg = ctx.cfg();
+
+    // Get project_id
+    let project_id = args.project_id.unwrap_or_else(|| {
+        std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "default".to_string())
+    });
+
+    // Build services
+    let services = ctx
+        .build_services(cfg)
+        .map_err(core_api::CliError::Runner)?;
+
+    // Get memory plugin
+    let memory = services
+        .memory
+        .as_ref()
+        .ok_or_else(|| core_api::CliError::Command("Memory service not configured".to_string()))?;
+
+    // Create validation payload
+    let payload = core_api::QAValidationPayload {
+        project_id,
+        qa_id: args.qa_id.clone(),
+        result: None,
+        signal_strength: None,
+        success: Some(args.success),
+        strong_signal: Some(args.success && args.confidence >= 0.8),
+        source: Some("claude-code".to_string()),
+        context: Some(format!("confidence:{}", args.confidence)),
+        client: None,
+        ts: Some(chrono::Local::now().to_rfc3339()),
+        payload: None,
+    };
+
+    // Record validation
+    memory
+        .record_validation(payload)
+        .await
+        .map_err(|e| core_api::CliError::Command(format!("Record validation failed: {}", e)))?;
+
+    // Output success
+    let output = json!({
+        "success": true,
+        "message": "Validation recorded successfully",
+        "qa_id": args.qa_id,
+        "validation_success": args.success,
+        "confidence": args.confidence
     });
     println!("{}", serde_json::to_string_pretty(&output).unwrap());
 

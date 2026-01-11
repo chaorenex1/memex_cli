@@ -83,6 +83,7 @@ fn exit_code_for_error(e: &CliError) -> i32 {
             RunnerError::Spawn(_) => 20,
             RunnerError::StreamIo { .. } => 20,
             RunnerError::Plugin(_) => 50,
+            RunnerError::Stdio(_) => 50,
         },
         CliError::Io(_) => 20,
         CliError::Command(_) => 20,
@@ -130,6 +131,10 @@ async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Resul
         }
         cli::Commands::RecordHit(hit_args) => {
             memex_cli::commands::memory::handle_record_hit(hit_args, &ctx).await?;
+            Ok(0)
+        }
+        cli::Commands::RecordValidation(validation_args) => {
+            memex_cli::commands::memory::handle_record_validation(validation_args, &ctx).await?;
             Ok(0)
         }
         cli::Commands::RecordSession(session_args) => {

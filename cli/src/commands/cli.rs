@@ -39,13 +39,13 @@ pub struct Args {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    #[arg(long, default_value = "codex", global = true)]
+    #[arg(long, default_value = "codex", global = false)]
     pub codecli_bin: String,
 
-    #[arg(trailing_var_arg = true, global = true)]
+    #[arg(trailing_var_arg = true, global = false)]
     pub codecli_args: Vec<String>,
 
-    #[arg(long, default_value_t = 65536, global = true)]
+    #[arg(long, default_value_t = 65536, global = false)]
     pub capture_bytes: usize,
 }
 
@@ -107,6 +107,20 @@ pub struct RunArgs {
 
     #[arg(long)]
     pub memory_api_key: Option<String>,
+
+    /// Parse input as structured STDIO protocol text (default: true)
+    ///
+    /// When enabled (--structured-text):
+    ///   - Parse input following STDIO protocol format
+    ///   - Support multiple tasks with dependencies
+    ///   - Input format: ---TASK--- / ---CONTENT--- / ---END---
+    ///
+    /// When disabled (--no-structured-text):
+    ///   - Treat input as plain text content
+    ///   - Create single task automatically
+    ///   - Useful for simple prompts
+    #[arg(long, default_value_t = true)]
+    pub structured_text: bool,
 }
 
 #[derive(ClapArgs, Debug, Clone)]
@@ -202,6 +216,25 @@ pub struct RecordHitArgs {
 }
 
 #[derive(ClapArgs, Debug, Clone)]
+pub struct RecordValidationArgs {
+    /// QA ID to validate (required)
+    #[arg(long)]
+    pub qa_id: String,
+
+    /// Whether the validation was successful
+    #[arg(long)]
+    pub success: bool,
+
+    /// Confidence score (0.0 to 1.0)
+    #[arg(long, default_value_t = 0.8)]
+    pub confidence: f32,
+
+    /// Project ID (defaults to config)
+    #[arg(long)]
+    pub project_id: Option<String>,
+}
+
+#[derive(ClapArgs, Debug, Clone)]
 pub struct RecordSessionArgs {
     /// Session transcript file path (JSONL format)
     #[arg(long)]
@@ -248,6 +281,7 @@ pub enum Commands {
     Search(SearchArgs),
     RecordCandidate(RecordCandidateArgs),
     RecordHit(RecordHitArgs),
+    RecordValidation(RecordValidationArgs),
     RecordSession(RecordSessionArgs),
     HttpServer(HttpServerArgs),
 }
