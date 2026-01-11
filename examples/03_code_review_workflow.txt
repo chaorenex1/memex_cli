@@ -1,0 +1,97 @@
+# Example 3: Code Review Workflow
+#
+# Usage:
+#   memex-cli run --backend claude --stdin < examples/03_code_review_workflow.txt
+#
+# This example shows how to perform multi-stage code review with different focus areas
+
+---TASK---
+id: security-review
+backend: claude
+workdir: /path/to/project
+model: claude-opus-4
+files: src/auth.rs, src/api/user.rs
+files-mode: embed
+---CONTENT---
+对以上代码文件进行安全审查。
+
+检查项：
+1. SQL 注入漏洞
+2. XSS 攻击点
+3. CSRF 防护
+4. 认证/授权缺陷
+5. 敏感数据泄露
+6. 不安全的密码学使用
+
+对每个发现的问题：
+- 标明严重程度（Critical/High/Medium/Low）
+- 给出具体的代码位置
+- 提供修复建议和示例代码
+---END---
+
+---TASK---
+id: performance-review
+backend: claude
+workdir: /path/to/project
+dependencies: security-review
+model: claude-sonnet-4
+files: src/db/query.rs, src/cache.rs
+files-mode: embed
+---CONTENT---
+对以上代码文件进行性能审查。
+
+检查项：
+1. N+1 查询问题
+2. 内存泄漏风险
+3. 阻塞操作
+4. 缓存策略
+5. 数据库索引使用
+6. 并发处理效率
+
+对每个性能问题：
+- 估算影响程度
+- 提供优化方案
+- 给出性能提升的预期
+---END---
+
+---TASK---
+id: code-quality-review
+backend: claude
+workdir: /path/to/project
+dependencies: performance-review
+---CONTENT---
+对整体代码质量进行审查。
+
+检查项：
+1. 代码风格一致性
+2. 命名规范
+3. 注释完整性
+4. 错误处理策略
+5. 模块化程度
+6. 可测试性
+
+生成：
+- 代码质量评分（0-100）
+- 改进建议（优先级排序）
+- 重构计划（短期/长期）
+---END---
+
+---TASK---
+id: generate-report
+backend: claude
+workdir: /path/to/project
+dependencies: code-quality-review
+model: claude-opus-4
+---CONTENT---
+综合以上三个审查结果，生成完整的代码审查报告。
+
+报告格式：
+1. 执行摘要（Executive Summary）
+2. 安全问题清单（按严重程度排序）
+3. 性能问题清单（按影响程度排序）
+4. 代码质量改进建议
+5. 行动计划（Action Items）
+6. 长期优化建议
+
+输出格式：Markdown，包含表格和代码示例
+---END---

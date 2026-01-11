@@ -1,0 +1,15 @@
+# Example 1: Simple Prompt (Plain Text Mode)
+#
+# Usage:
+#   memex-cli run --backend codex --no-structured-text --prompt-file examples/01_simple_prompt.txt
+#
+# Or via stdin:
+#   cat examples/01_simple_prompt.txt | memex-cli run --backend codex --no-structured-text --stdin
+
+编写一个 Rust 函数，实现快速排序算法。
+
+要求：
+1. 使用泛型支持不同数据类型
+2. 添加详细的文档注释
+3. 包含时间复杂度分析
+4. 提供使用示例

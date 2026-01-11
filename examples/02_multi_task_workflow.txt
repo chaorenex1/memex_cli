@@ -1,0 +1,88 @@
+# Example 2: Multi-Task Workflow (Structured Mode)
+#
+# Usage:
+#   memex-cli run --backend codex --stdin < examples/02_multi_task_workflow.txt
+#
+# This example demonstrates a complete API development workflow with dependencies
+
+---TASK---
+id: design-api
+backend: claude
+workdir: /tmp/api-project
+model: claude-sonnet-4
+---CONTENT---
+设计一个用户认证系统的 REST API 接口规范。
+
+要求：
+1. 定义以下端点：
+   - POST /api/v1/auth/register (用户注册)
+   - POST /api/v1/auth/login (用户登录)
+   - POST /api/v1/auth/logout (用户登出)
+   - GET /api/v1/auth/me (获取当前用户信息)
+
+2. 每个端点需要包含：
+   - 请求参数（Query/Body）
+   - 响应格式（JSON Schema）
+   - 错误码定义
+   - 安全考虑（CSRF, XSS防护）
+
+3. 使用 OpenAPI 3.0 格式输出
+---END---
+
+---TASK---
+id: implement-api
+backend: codex
+workdir: /tmp/api-project
+dependencies: design-api
+---CONTENT---
+根据上面的 API 设计文档，使用 Rust + Axum 框架实现完整的认证系统。
+
+要求：
+1. 实现所有 API 端点
+2. 使用 JWT 进行身份验证
+3. 密码使用 bcrypt 加密
+4. 添加请求验证中间件
+5. 实现错误处理
+6. 代码需要良好的模块化组织
+---END---
+
+---TASK---
+id: write-tests
+backend: codex
+workdir: /tmp/api-project
+dependencies: implement-api
+---CONTENT---
+为上面实现的认证系统编写完整的测试套件。
+
+要求：
+1. 单元测试：
+   - 测试密码加密/验证逻辑
+   - 测试 JWT 生成/验证
+
+2. 集成测试：
+   - 测试注册流程（成功/失败场景）
+   - 测试登录流程（正确/错误密码）
+   - 测试受保护端点的访问控制
+
+3. 使用 tokio-test 和 tower 的测试工具
+4. 测试覆盖率至少达到 80%
+---END---
+
+---TASK---
+id: documentation
+backend: claude
+workdir: /tmp/api-project
+dependencies: write-tests
+model: claude-sonnet-4
+---CONTENT---
+生成项目的 README.md 文档。
+
+要求：
+1. 项目简介
+2. 快速开始指南
+3. API 使用示例（curl 命令）
+4. 配置说明
+5. 开发指南
+6. 安全最佳实践
+7. 许可证信息
+---END---
