@@ -2,12 +2,12 @@
   "name": "memory",
   "version": "1.0.0",
   "description": "Memory management plugin for memex-cli integration - enables session memory recording, retrieval, and context injection",
-  "owner": {
+  "author": {
     "name": "chaorenex1",
     "email": "24537608z@gmail.com"
   },
   "homepage": "https://github.com/chaorenex1/memex-cli.git",
   "repository": "https://github.com/chaorenex1/memex-cli.git",
   "license": "Apache-2.0",
-  "keywords": ["memory", "context", "retrieval", "memex", "session-management"]
+  "keywords": ["memory", "context", "retrieval", "memex", "session-management"],
 }
