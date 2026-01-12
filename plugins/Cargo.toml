@@ -23,5 +23,8 @@ lru = { workspace = true}
 memmap2 = { workspace = true}
 lazy_static = { workspace = true}
 
+[dev-dependencies]
+mockito = { workspace = true}
+
 [lints]
 workspace = true

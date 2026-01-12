@@ -1,5 +1,6 @@
 //! HTTP路由handlers
 
+use anyhow::Error;
 use axum::{
     extract::State,
     routing::{get, post},
@@ -9,6 +10,7 @@ use chrono::Local;
 use memex_core::api::{
     QACandidatePayload, QAHitsPayload, QAReferencePayload, QASearchPayload, QAValidationPayload,
 };
+use memex_plugins::memory::http_client::MemoryHttpError;
 
 use crate::http::{
     models::*,
@@ -438,7 +440,17 @@ async fn evaluate_session_handler(
                     tracing::info!(target: "memex.http", "Recorded {} hits", hits_recorded);
                 }
                 Err(e) => {
-                    tracing::warn!(target: "memex.http", "Failed to record hits: {}", e);
+                    let error_chain = format_error_chain(&e);
+                    let (error_class, error_status, error_url) = memory_error_class(&e);
+                    tracing::warn!(
+                        target: "memex.http",
+                        error = %e,
+                        error_class = %error_class,
+                        error_status = ?error_status,
+                        error_url = ?error_url,
+                        error_chain = %error_chain,
+                        "Failed to record hits"
+                    );
                 }
             }
         }
@@ -452,7 +464,17 @@ async fn evaluate_session_handler(
         match memory.record_validation(payload).await {
             Ok(_) => validations_recorded += 1,
             Err(e) => {
-                tracing::warn!(target: "memex.http", "Failed to record validation: {}", e);
+                let error_chain = format_error_chain(&e);
+                let (error_class, error_status, error_url) = memory_error_class(&e);
+                tracing::warn!(
+                    target: "memex.http",
+                    error = %e,
+                    error_class = %error_class,
+                    error_status = ?error_status,
+                    error_url = ?error_url,
+                    error_chain = %error_chain,
+                    "Failed to record validation"
+                );
             }
         }
     }
@@ -494,7 +516,17 @@ async fn evaluate_session_handler(
             match memory.record_candidate(candidate_payload).await {
                 Ok(_) => candidates_recorded += 1,
                 Err(e) => {
-                    tracing::warn!(target: "memex.http", "Failed to record candidate: {}", e);
+                    let error_chain = format_error_chain(&e);
+                    let (error_class, error_status, error_url) = memory_error_class(&e);
+                    tracing::warn!(
+                        target: "memex.http",
+                        error = %e,
+                        error_class = %error_class,
+                        error_status = ?error_status,
+                        error_url = ?error_url,
+                        error_chain = %error_chain,
+                        "Failed to record candidate"
+                    );
                 }
             }
         }
@@ -521,6 +553,27 @@ async fn shutdown_handler(State(state): State<AppState>) -> Json<serde_json::Val
         "success": true,
         "message": "Shutdown signal sent"
     }))
+}
+
+fn memory_error_class(err: &Error) -> (String, Option<u16>, Option<String>) {
+    for cause in err.chain() {
+        if let Some(mem_err) = cause.downcast_ref::<MemoryHttpError>() {
+            return (
+                mem_err.kind().to_string(),
+                mem_err.status(),
+                mem_err.url().map(|url| url.to_string()),
+            );
+        }
+    }
+
+    ("unknown".to_string(), None, None)
+}
+
+fn format_error_chain(err: &Error) -> String {
+    err.chain()
+        .map(|cause| cause.to_string())
+        .collect::<Vec<_>>()
+        .join(" -> ")
 }
 
 #[cfg(test)]
