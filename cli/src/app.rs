@@ -30,14 +30,13 @@ pub async fn run_app_with_config(
         if let Some(project_id) = run_args.as_ref().and_then(|ra| ra.project_id.clone()) {
             project_id
         } else {
-            std::env::current_dir()
+            let current_dir = std::env::current_dir()
                 .map_err(|e| {
                     core_api::RunnerError::Config(format!(
                         "failed to determine project_id from current_dir fallback: {e}"
                     ))
-                })?
-                .to_string_lossy()
-                .to_string()
+                })?;
+            crate::utils::project_id::generate_project_id(&current_dir)
         };
 
     let stream_format = run_args

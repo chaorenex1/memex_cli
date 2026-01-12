@@ -14,41 +14,64 @@ def get_project_id_from_cwd(cwd: str) -> str:
     """
     从 cwd 生成 project_id
 
-    格式: basename-hash8
-    示例: memex_cli-a1b2c3d4
+    格式: 规范化路径字符串（纯路径格式）
+    示例: c--users-user-projects-memex_cli
+
+    规则：
+    1. 转小写
+    2. Windows驱动器 "C:\\" → "c--"
+    3. Unix路径移除开头 "/"
+    4. 路径分隔符 / 和 \\ → "-"
+    5. 空格和特殊字符 → "_"
+    6. 最大长度 64 字符
 
     Args:
         cwd: Hook 输入中的 cwd 字段（当前工作目录）
 
     Returns:
-        project_id 字符串，格式为 "basename-hash8"
+        project_id 字符串，格式为规范化路径
 
     Examples:
         >>> get_project_id_from_cwd("C:\\Users\\user\\projects\\memex_cli")
-        'memex_cli-1a2b3c4d'
+        'c--users-user-projects-memex_cli'
 
         >>> get_project_id_from_cwd("/home/user/projects/my-app")
-        'my-app-5e6f7g8h'
+        'home-user-projects-my-app'
     """
     if not cwd:
         return "default"
 
-    # 获取目录名（basename）
-    basename = os.path.basename(cwd)
-
     # 规范化路径（处理 Windows/Linux 差异）
-    # 统一使用小写和正斜杠
-    normalized = os.path.normpath(cwd).lower().replace('\\', '/')
+    normalized = os.path.normpath(cwd).lower()
 
-    # 生成短哈希（8位足够）
-    hash_obj = hashlib.sha256(normalized.encode('utf-8'))
-    short_hash = hash_obj.hexdigest()[:8]
+    # Windows: 驱动器号处理 "c:\\" → "c--"
+    drive_letter = None
+    if len(normalized) >= 2 and normalized[1] == ':':
+        drive_letter = normalized[0]
+        rest_path = normalized[3:] if len(normalized) > 3 else ""  # 跳过 ":\\" 或 ":/"
+        # 统一路径分隔符为 "-"
+        rest_path = rest_path.replace('\\', '-').replace('/', '-')
+        # 直接处理剩余路径，稍后拼接驱动器号
+        normalized = rest_path
 
-    # 组合：basename-hash
-    project_id = f"{basename}-{short_hash}"
+    # Unix: 移除开头的 "/"
+    elif normalized.startswith('/'):
+        normalized = normalized[1:]
+        # 统一路径分隔符为 "-"
+        normalized = normalized.replace('/', '-')
+
+    else:
+        # 相对路径
+        normalized = normalized.replace('\\', '-').replace('/', '-')
 
     # 清理非法字符
-    return _sanitize_project_id(project_id)
+    result = _sanitize_project_id(normalized)
+
+    # 添加驱动器前缀
+    if drive_letter:
+        result = f"{drive_letter}--{result}" if result else f"{drive_letter}--"
+
+    return result
 
 
 def _sanitize_project_id(raw_id: str) -> str:
