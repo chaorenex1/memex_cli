@@ -1,0 +1,20 @@
+{
+  "name": "memex-cli-plugins",
+  "version": "1.0.0",
+  "description": "Official plugin marketplace for memex-cli - Memory management and context injection for Claude Code",
+  "plugins": [
+    {
+      "name": "memory",
+      "source": "./memory",
+      "version": "1.0.0",
+      "description": "Memory management plugin - enables session memory recording, retrieval, and context injection through memex-cli integration",
+      "keywords": ["memory", "context", "retrieval", "memex", "session-management"],
+      "author": {
+        "name": "chaorenex1",
+        "email": "24537608z@gmail.com"
+      }
+    }
+  ],
+  "repository": "https://github.com/chaorenex1/memex-cli",
+  "license": "Apache-2.0"
+}
