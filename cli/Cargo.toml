@@ -1,6 +1,6 @@
 ﻿[package]
 name = "memex-cli"
-version = "1.0.5-alpha.2"
+version = "1.0.5"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"

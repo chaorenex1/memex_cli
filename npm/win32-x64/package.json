@@ -1,6 +1,6 @@
 ﻿{
     "name":  "@memex-cli/win32-x64",
-    "version":  "1.0.5-alpha.2",
+    "version":  "1.0.5",
     "description":  "memex-cli binary for Windows x64",
     "repository":  {
                        "type":  "git",

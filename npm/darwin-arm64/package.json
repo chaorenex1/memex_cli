@@ -1,6 +1,6 @@
 ﻿{
     "name":  "@memex-cli/darwin-arm64",
-    "version":  "1.0.5-alpha.2",
+    "version":  "1.0.5",
     "description":  "memex-cli binary for macOS ARM64",
     "repository":  {
                        "type":  "git",
