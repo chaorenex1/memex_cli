@@ -2,20 +2,10 @@ use anyhow::Result;
 
 use memex_core::api as core_api;
 
+use crate::backend::encoding::{
+    detect_encoding_strategy, escape_shell_arg, prepare_stdin_payload, EncodingStrategy,
+};
 use crate::runner::codecli::CodeCliRunnerPlugin;
-
-/// 预处理 prompt，将特殊字符转换为安全形式
-/// 使用 JSON 字符串编码，防止被 Windows shell 截断或错误解释
-fn sanitize_prompt(prompt: &str) -> String {
-    // 利用 serde_json 的字符串编码，自动处理所有特殊字符
-    match serde_json::to_string(prompt) {
-        Ok(json) if json.len() >= 2 => {
-            // 去掉首尾引号，保留内部转义
-            json[1..json.len() - 1].to_string()
-        }
-        _ => prompt.to_string(),
-    }
-}
 
 pub struct CodeCliBackendStrategy;
 
@@ -29,15 +19,40 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             backend,
             base_envs,
             resume_id,
-            prompt,
+            prompt: raw_prompt,
             model,
             model_provider,
             project_id,
             stream_format,
         } = request;
 
-        // 预处理 prompt，防止特殊字符被 shell 截断
-        let prompt = sanitize_prompt(&prompt);
+        // 提取命令类型用于判断参数格式（codex/claude/gemini）
+        let cmd_type = extract_command_type(&backend);
+
+        // 使用新的编码策略检测
+        let encoding_strategy = detect_encoding_strategy(&raw_prompt);
+        let use_stdin_prompt = match encoding_strategy {
+            EncodingStrategy::DirectArgs => false,
+            EncodingStrategy::ForceStdin { .. } => {
+                // 仅对支持 stdin 的后端启用
+                cmd_type.contains("codex")
+                    || cmd_type.contains("gemini")
+                    || cmd_type.contains("claude")
+            }
+        };
+
+        let stdin_payload = if use_stdin_prompt {
+            Some(prepare_stdin_payload(&raw_prompt))
+        } else {
+            None
+        };
+
+        tracing::info!(
+            "Encoding strategy: {:?}, prompt_len: {}, use_stdin: {}",
+            encoding_strategy,
+            raw_prompt.len(),
+            use_stdin_prompt
+        );
 
         let mut args: Vec<String> = Vec::new();
         let envs = base_envs;
@@ -52,9 +67,6 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         // 解析可执行文件完整路径
         let exe_path = resolve_executable_path(&backend)?;
         tracing::info!("Resolved executable path: {}", exe_path);
-
-        // 提取命令类型用于判断参数格式（codex/claude/gemini）
-        let cmd_type = extract_command_type(&backend);
 
         let cwd = if !cmd_type.contains("codex") {
             project_id
@@ -98,8 +110,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 }
             }
 
-            if !prompt.is_empty() {
-                args.push(prompt);
+            if !raw_prompt.is_empty() && !use_stdin_prompt {
+                args.push(escape_shell_arg(&raw_prompt));
             }
         } else if cmd_type.contains("claude") {
             // Matches examples like:
@@ -112,6 +124,10 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             args.push("-p".to_string());
             args.push("--dangerously-skip-permissions".to_string());
             args.push("--setting-sources=".to_string());
+            if use_stdin_prompt {
+                args.push("--input-format".to_string());
+                args.push("text".to_string());
+            }
 
             args.push("--output-format".to_string());
             args.push("stream-json".to_string());
@@ -131,8 +147,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                     args.push(resume_id.to_string());
                 }
             }
-            if !prompt.is_empty() {
-                args.push(prompt);
+            if !raw_prompt.is_empty() && !use_stdin_prompt {
+                args.push(escape_shell_arg(&raw_prompt));
             }
             // if let Some(dir) = &project_id {
             //     args.push("--add-dir".to_string());
@@ -141,10 +157,12 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             // }
         } else if cmd_type.contains("gemini") {
             // Matches examples like:
-            // gemini -p "..." -y -o stream-json
-            if !prompt.is_empty() {
+            // gemini "..." -y -o stream-json
+            if use_stdin_prompt {
                 args.push("-p".to_string());
-                args.push(prompt);
+                args.push(String::new());
+            } else if !raw_prompt.is_empty() {
+                args.push(escape_shell_arg(&raw_prompt));
             }
 
             args.push("-y".to_string());
@@ -178,8 +196,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 args.push("--model".to_string());
                 args.push(m);
             }
-            if !prompt.is_empty() {
-                args.push(prompt);
+            if !raw_prompt.is_empty() {
+                args.push(escape_shell_arg(&raw_prompt));
             }
         }
 
@@ -190,6 +208,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 args,
                 envs,
                 cwd,
+                stdin_payload,
             },
         })
     }
