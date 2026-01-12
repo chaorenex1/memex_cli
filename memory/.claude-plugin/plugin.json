@@ -9,5 +9,5 @@
   "homepage": "https://github.com/chaorenex1/memex-cli.git",
   "repository": "https://github.com/chaorenex1/memex-cli.git",
   "license": "Apache-2.0",
-  "keywords": ["memory", "context", "retrieval", "memex", "session-management"],
+  "keywords": ["memory", "context", "retrieval", "memex", "session-management"]
 }
