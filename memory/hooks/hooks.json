@@ -23,18 +23,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python ${CLAUDE_PLUGIN_ROOT}/scripts/memory-record.py",
-            "timeout": 300
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [

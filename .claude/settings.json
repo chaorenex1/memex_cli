@@ -37,18 +37,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python memory/scripts/memory-record.py",
-            "timeout": 300
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
