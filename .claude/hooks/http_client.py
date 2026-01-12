@@ -109,6 +109,25 @@ class HTTPClient:
         except Exception as e:
             return {"success": False, "error": f"HTTP request failed: {str(e)}"}
 
+    def request(
+        self,
+        endpoint: str,
+        method: str = "POST",
+        data: Dict = None
+    ) -> Dict[str, Any]:
+        """
+        通用HTTP请求接口
+
+        Args:
+            endpoint: API端点路径
+            method: HTTP方法 (GET/POST)
+            data: 请求数据
+
+        Returns:
+            响应字典
+        """
+        return self._send_request(method, endpoint, data)
+
     def search(
         self,
         query: str,
