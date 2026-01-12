@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录</title>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --card-bg: #ffffff;
+      --primary: #4285f4;
+      --primary-dark: #2f6fe0;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+      --focus: 0 0 0 3px rgba(66, 133, 244, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Poppins", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 600px at 20% 10%, #e9f0ff 0%, transparent 60%),
+        radial-gradient(900px 600px at 90% 30%, #e9f7ff 0%, transparent 55%),
+        var(--bg);
+      padding: 24px;
+    }
+
+    .card {
+      width: min(420px, 100%);
+      background: var(--card-bg);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 36px 32px;
+      position: relative;
+      overflow: hidden;
+      animation: card-in 0.7s ease both;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      top: -120px;
+      right: -120px;
+      width: 260px;
+      height: 260px;
+      background: linear-gradient(145deg, rgba(66, 133, 244, 0.18), rgba(66, 133, 244, 0));
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      letter-spacing: 0.2px;
+    }
+
+    .subtitle {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .field {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .field + .field {
+      margin-top: 14px;
+    }
+
+    .field:focus-within {
+      border-color: var(--primary);
+      box-shadow: var(--focus);
+      transform: translateY(-1px);
+    }
+
+    .field svg {
+      width: 20px;
+      height: 20px;
+      color: var(--primary);
+      flex-shrink: 0;
+    }
+
+    .field input {
+      border: none;
+      outline: none;
+      flex: 1;
+      font-size: 14px;
+      background: transparent;
+      color: var(--text);
+      padding: 4px 0;
+    }
+
+    .row {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+
+    .remember {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .remember input {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      display: grid;
+      place-items: center;
+      background: #fff;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .remember input::after {
+      content: "";
+      width: 8px;
+      height: 8px;
+      transform: scale(0);
+      background: #fff;
+      border-radius: 2px;
+      transition: transform 0.15s ease;
+    }
+
+    .remember input:checked {
+      border-color: var(--primary);
+      background: var(--primary);
+    }
+
+    .remember input:checked::after {
+      transform: scale(1);
+    }
+
+    .remember input:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
+    .forgot {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    .forgot:hover {
+      color: var(--primary-dark);
+    }
+
+    .primary-btn {
+      margin-top: 22px;
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      box-shadow: 0 12px 20px rgba(66, 133, 244, 0.25);
+    }
+
+    .primary-btn:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .primary-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 22px 0 16px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .oauth {
+      display: grid;
+      gap: 12px;
+    }
+
+    .oauth button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--text);
+      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .oauth button:hover {
+      border-color: var(--primary);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 16px rgba(15, 23, 42, 0.08);
+    }
+
+    .oauth button:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
+    .oauth svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .footer {
+      margin-top: 18px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    @keyframes card-in {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 16px;
+      }
+
+      .card {
+        padding: 28px 22px;
+        border-radius: 16px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      .row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .primary-btn {
+        font-size: 14px;
+      }
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <main class="card" role="main">
+    <h1>欢迎回来</h1>
+    <p class="subtitle">请使用您的账号登录</p>
+
+    <label class="field" aria-label="用户名">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 21v-2a4 4 0 0 0-3-3.8" />
+        <path d="M4 21v-2a4 4 0 0 1 3-3.8" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+      <input type="text" name="username" placeholder="用户名" autocomplete="username" />
+    </label>
+
+    <label class="field" aria-label="密码">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="10" rx="2" />
+        <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+      </svg>
+      <input type="password" name="password" placeholder="密码" autocomplete="current-password" />
+    </label>
+
+    <div class="row">
+      <label class="remember">
+        <input type="checkbox" name="remember" />
+        记住我
+      </label>
+      <a class="forgot" href="#">忘记密码？</a>
+    </div>
+
+    <button class="primary-btn" type="button">登录</button>
+
+    <div class="divider">或使用以下方式登录</div>
+
+    <div class="oauth">
+      <button type="button" aria-label="使用 Google 登录">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#EA4335" d="M12 10.2v3.8h5.4c-.2 1.2-1.4 3.5-5.4 3.5-3.2 0-5.9-2.7-5.9-6s2.7-6 5.9-6c1.9 0 3.1.8 3.9 1.5l2.7-2.6C16.9 2.7 14.7 1.8 12 1.8 6.9 1.8 2.8 6 2.8 11.2S6.9 20.6 12 20.6c6 0 7.4-4.2 7.4-6.4 0-.4 0-.8-.1-1.1H12z" />
+        </svg>
+        Google 登录
+      </button>
+      <button type="button" aria-label="使用 GitHub 登录">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2.2a9.8 9.8 0 0 0-3.1 19.1c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.2-1.5-1.2-1.5-1-.7.1-.7.1-.7 1.1.1 1.7 1.1 1.7 1.1 1 .1.1.1.1.1.9 1.5 2.3 1.1 2.9.9.1-.7.4-1.1.7-1.3-2.2-.2-4.6-1.1-4.6-5a4 4 0 0 1 1.1-2.8 3.7 3.7 0 0 1 .1-2.8s.9-.3 2.9 1.1a10.1 10.1 0 0 1 5.2 0c2-1.4 2.9-1.1 2.9-1.1.6 1.5.2 2.6.1 2.8a4 4 0 0 1 1.1 2.8c0 3.9-2.4 4.8-4.6 5 .4.3.8 1 .8 2v3c0 .3.2.6.7.5A9.8 9.8 0 0 0 12 2.2z" />
+        </svg>
+        GitHub 登录
+      </button>
+    </div>
+
+    <p class="footer">没有账号？联系客服获取访问</p>
+  </main>
+</body>
+</html>

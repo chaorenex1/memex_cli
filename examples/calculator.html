@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calculator</title>
+    <style>
+      :root {
+        --bg: #202124;
+        --display-bg: #181818;
+        --number-bg: #3c4043;
+        --operator-bg: #8ab4f8;
+        --function-bg: #5f6368;
+        --text: #e8eaed;
+        --operator-text: #202124;
+        --gap: 12px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at 20% 10%, #2b2d31, #202124 60%);
+        font-family: Roboto, Arial, sans-serif;
+        color: var(--text);
+      }
+
+      .calculator {
+        width: 380px;
+        padding: 18px;
+        border-radius: 24px;
+        background: #1b1c1f;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      }
+
+      .display {
+        height: 110px;
+        background: var(--display-bg);
+        border-radius: 18px;
+        padding: 18px 22px;
+        font-size: 3.5rem;
+        text-align: right;
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-end;
+        overflow: hidden;
+        letter-spacing: 1px;
+      }
+
+      .buttons {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        grid-auto-rows: 72px;
+        gap: var(--gap);
+      }
+
+      .btn {
+        border: none;
+        border-radius: 50%;
+        font-size: 1.8rem;
+        color: var(--text);
+        background: var(--number-bg);
+        cursor: pointer;
+        transition: filter 0.15s ease, box-shadow 0.1s ease, transform 0.1s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        user-select: none;
+      }
+
+      .btn:hover {
+        filter: brightness(1.12);
+      }
+
+      .btn:active {
+        box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.35);
+        transform: translateY(1px);
+      }
+
+      .btn.function {
+        background: var(--function-bg);
+      }
+
+      .btn.operator {
+        background: var(--operator-bg);
+        color: var(--operator-text);
+      }
+
+      .btn.span-two {
+        grid-column: span 2;
+        border-radius: 24px;
+        justify-content: flex-start;
+        padding-left: 28px;
+      }
+
+      @media (max-width: 420px) {
+        .calculator {
+          width: 92vw;
+        }
+
+        .buttons {
+          grid-auto-rows: 64px;
+        }
+
+        .display {
+          font-size: 3rem;
+          height: 96px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="calculator">
+      <div class="display" id="display">0</div>
+      <div class="buttons">
+        <button class="btn function" data-action="clear">C</button>
+        <button class="btn function" data-action="sign">±</button>
+        <button class="btn function" data-action="percent">%</button>
+        <button class="btn operator" data-action="operator" data-value="÷">÷</button>
+
+        <button class="btn" data-value="7">7</button>
+        <button class="btn" data-value="8">8</button>
+        <button class="btn" data-value="9">9</button>
+        <button class="btn operator" data-action="operator" data-value="×">×</button>
+
+        <button class="btn" data-value="4">4</button>
+        <button class="btn" data-value="5">5</button>
+        <button class="btn" data-value="6">6</button>
+        <button class="btn operator" data-action="operator" data-value="-">-</button>
+
+        <button class="btn" data-value="1">1</button>
+        <button class="btn" data-value="2">2</button>
+        <button class="btn" data-value="3">3</button>
+        <button class="btn operator" data-action="operator" data-value="+">+</button>
+
+        <button class="btn span-two" data-value="0">0</button>
+        <button class="btn" data-action="decimal">.</button>
+        <button class="btn operator" data-action="equals">=</button>
+      </div>
+    </div>
+
+    <script>
+      const display = document.getElementById("display");
+      let current = "0";
+      let previous = null;
+      let operator = null;
+      let overwrite = false;
+
+      const updateDisplay = () => {
+        display.textContent = current;
+      };
+
+      const formatNumber = (value) => {
+        const str = value.toString();
+        if (str.length <= 12) {
+          return str;
+        }
+        return value.toPrecision(12).replace(/\.?0+$/, "");
+      };
+
+      const inputDigit = (digit) => {
+        if (current === "Error") {
+          current = digit;
+          overwrite = false;
+          updateDisplay();
+          return;
+        }
+        if (current === "0" || overwrite) {
+          current = digit;
+          overwrite = false;
+          updateDisplay();
+          return;
+        }
+        current += digit;
+        updateDisplay();
+      };
+
+      const inputDecimal = () => {
+        if (current === "Error") {
+          current = "0.";
+          overwrite = false;
+          updateDisplay();
+          return;
+        }
+        if (overwrite) {
+          current = "0.";
+          overwrite = false;
+          updateDisplay();
+          return;
+        }
+        if (!current.includes(".")) {
+          current += ".";
+          updateDisplay();
+        }
+      };
+
+      const clearAll = () => {
+        current = "0";
+        previous = null;
+        operator = null;
+        overwrite = false;
+        updateDisplay();
+      };
+
+      const toggleSign = () => {
+        if (current === "Error") {
+          return;
+        }
+        if (current.startsWith("-")) {
+          current = current.slice(1);
+        } else if (current !== "0") {
+          current = `-${current}`;
+        }
+        updateDisplay();
+      };
+
+      const applyPercent = () => {
+        if (current === "Error") {
+          return;
+        }
+        const value = parseFloat(current);
+        current = formatNumber(value / 100);
+        updateDisplay();
+      };
+
+      const compute = (left, right, op) => {
+        const a = parseFloat(left);
+        const b = parseFloat(right);
+        switch (op) {
+          case "+":
+            return a + b;
+          case "-":
+            return a - b;
+          case "×":
+            return a * b;
+          case "÷":
+            return b === 0 ? null : a / b;
+          default:
+            return b;
+        }
+      };
+
+      const handleOperator = (nextOperator) => {
+        if (current === "Error") {
+          return;
+        }
+        if (operator && !overwrite) {
+          const result = compute(previous, current, operator);
+          if (result === null) {
+            current = "Error";
+            previous = null;
+            operator = null;
+            overwrite = true;
+            updateDisplay();
+            return;
+          }
+          current = formatNumber(result);
+          previous = current;
+        } else if (!operator) {
+          previous = current;
+        }
+        operator = nextOperator;
+        overwrite = true;
+        updateDisplay();
+      };
+
+      const evaluate = () => {
+        if (!operator || current === "Error") {
+          return;
+        }
+        const result = compute(previous, current, operator);
+        if (result === null) {
+          current = "Error";
+          previous = null;
+          operator = null;
+          overwrite = true;
+          updateDisplay();
+          return;
+        }
+        current = formatNumber(result);
+        previous = null;
+        operator = null;
+        overwrite = true;
+        updateDisplay();
+      };
+
+      document.querySelector(".buttons").addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) {
+          return;
+        }
+        const action = button.dataset.action;
+        const value = button.dataset.value || button.textContent.trim();
+
+        switch (action) {
+          case "clear":
+            clearAll();
+            break;
+          case "sign":
+            toggleSign();
+            break;
+          case "percent":
+            applyPercent();
+            break;
+          case "operator":
+            handleOperator(value);
+            break;
+          case "decimal":
+            inputDecimal();
+            break;
+          case "equals":
+            evaluate();
+            break;
+          default:
+            inputDigit(value);
+            break;
+        }
+      });
+    </script>
+  </body>
+</html>
