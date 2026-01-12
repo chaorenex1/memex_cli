@@ -174,6 +174,7 @@ impl IntoResponse for HttpServerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
 
     #[test]
     fn test_search_request_deserialize() {
@@ -225,6 +226,31 @@ mod tests {
         assert!(json.contains("\"count\":5"));
         assert!(!json.contains("\"error\""));
     }
+
+    #[test]
+    fn test_evaluate_session_request_deserialize_structured_output() {
+        let json = r#"{
+            "project_id":"proj1",
+            "user_query":"q",
+            "tool_events":[
+                {"tool":"shell","args":{"command":"echo hi"},"output":[{"type":"text","text":"hi"}],"code":0},
+                {"tool":"shell","args":{},"output":{"type":"text","text":"ok"},"code":0},
+                {"tool":"shell","args":{},"output":"plain","code":0}
+            ],
+            "stdout":"",
+            "stderr":"",
+            "shown_qa_ids":[],
+            "used_qa_ids":[],
+            "exit_code":0,
+            "duration_ms":10
+        }"#;
+
+        let req: EvaluateSessionRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.tool_events.len(), 3);
+        assert!(matches!(req.tool_events[0].output, Some(Value::Array(_))));
+        assert!(matches!(req.tool_events[1].output, Some(Value::Object(_))));
+        assert!(matches!(req.tool_events[2].output, Some(Value::String(_))));
+    }
 }
 
 // ============= Evaluate Session =============
@@ -236,7 +262,7 @@ pub struct ToolEventSimple {
     #[serde(default)]
     pub args: serde_json::Value,
     #[serde(default)]
-    pub output: Option<String>,
+    pub output: Option<serde_json::Value>,
     #[serde(default)]
     pub code: Option<i32>,
 }
