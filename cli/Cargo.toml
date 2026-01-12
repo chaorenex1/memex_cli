@@ -22,6 +22,7 @@ clap = { workspace = true }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+encoding_rs = { workspace = true }
 
 # Error handling
 anyhow = { workspace = true }
@@ -43,7 +44,7 @@ atty = { workspace = true }
 # HTTP server
 axum = { workspace = true }
 tower = { workspace = true }
-tower-http = { workspace = true }
+tower-http = { workspace = true, features = ["fs"] }
 
 # System utilities
 arboard = { workspace = true }

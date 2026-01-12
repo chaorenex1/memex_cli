@@ -44,6 +44,7 @@ uuid = { version = "1.8", features = ["v4"] }
 
 # Text & regex
 regex = "^1.10"
+encoding_rs = "0.8"
 
 # TUI (Terminal UI)
 ratatui = "0.28"
