@@ -385,10 +385,7 @@ async fn evaluate_session_handler(
             action: None,
             args: te.args.clone(),
             ok: te.code.map(|c| c == 0),
-            output: te
-                .output
-                .as_ref()
-                .map(|s| serde_json::Value::String(s.clone())),
+            output: te.output.clone(),
             error: None,
             rationale: None,
         })
