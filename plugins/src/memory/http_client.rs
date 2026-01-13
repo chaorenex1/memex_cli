@@ -189,9 +189,14 @@ async fn ensure_success(resp: reqwest::Response) -> anyhow::Result<()> {
 
 #[derive(Clone)]
 pub struct HttpClient {
-    base_url: String,
     api_key: String,
     http: reqwest::Client,
+    // Pre-built URL endpoints for performance (avoid repeated format! and trim)
+    url_search: String,
+    url_hit: String,
+    url_candidate: String,
+    url_validate: String,
+    url_task_grade: String,
 }
 
 impl HttpClient {
@@ -199,10 +204,15 @@ impl HttpClient {
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_millis(timeout_ms))
             .build()?;
+        let normalized = base_url.trim_end_matches('/');
         Ok(Self {
-            base_url,
             api_key,
             http,
+            url_search: format!("{}/v1/qa/search", normalized),
+            url_hit: format!("{}/v1/qa/hit", normalized),
+            url_candidate: format!("{}/v1/qa/candidates", normalized),
+            url_validate: format!("{}/v1/qa/validate", normalized),
+            url_task_grade: format!("{}/v1/task/grade", normalized),
         })
     }
 
@@ -215,7 +225,7 @@ impl HttpClient {
     }
 
     pub async fn search(&self, payload: core_api::QASearchPayload) -> anyhow::Result<Value> {
-        let url = format!("{}/v1/qa/search", self.base_url.trim_end_matches('/'));
+        let url = &self.url_search;
         tracing::debug!(
             target: "memex.qa",
             stage = "memory.http.search.in",
@@ -225,7 +235,7 @@ impl HttpClient {
             limit = payload.limit,
             min_score = payload.min_score
         );
-        let req = self.http.post(url.clone()).json(&payload);
+        let req = self.http.post(url).json(&payload);
         let resp = self
             .auth(req)
             .send()
@@ -242,17 +252,14 @@ impl HttpClient {
     }
 
     pub async fn send_hit(&self, payload: core_api::QAHitsPayload) -> anyhow::Result<()> {
-        let url = format!("{}/v1/qa/hit", self.base_url.trim_end_matches('/'));
-        let used = payload
-            .references
-            .iter()
-            .filter(|r| r.used == Some(true))
-            .count();
-        let shown = payload
-            .references
-            .iter()
-            .filter(|r| r.shown == Some(true))
-            .count();
+        let url = &self.url_hit;
+        // Single-pass counting for used and shown references
+        let (used, shown) = payload.references.iter().fold((0, 0), |(u, s), r| {
+            (
+                u + usize::from(r.used == Some(true)),
+                s + usize::from(r.shown == Some(true)),
+            )
+        });
         tracing::debug!(
             target: "memex.qa",
             stage = "memory.http.hit.in",
@@ -262,7 +269,7 @@ impl HttpClient {
             shown = shown,
             used = used
         );
-        let req = self.http.post(url.clone()).json(&payload);
+        let req = self.http.post(url).json(&payload);
         let resp = self
             .auth(req)
             .send()
@@ -278,7 +285,7 @@ impl HttpClient {
         &self,
         payload: core_api::QACandidatePayload,
     ) -> anyhow::Result<()> {
-        let url = format!("{}/v1/qa/candidates", self.base_url.trim_end_matches('/'));
+        let url = &self.url_candidate;
         tracing::debug!(
             target: "memex.qa",
             stage = "memory.http.candidate.in",
@@ -286,7 +293,7 @@ impl HttpClient {
             project_id = %payload.project_id,
             tags = payload.tags.len()
         );
-        let req = self.http.post(url.clone()).json(&payload);
+        let req = self.http.post(url).json(&payload);
         let resp = self
             .auth(req)
             .send()
@@ -306,7 +313,7 @@ impl HttpClient {
         &self,
         payload: core_api::QAValidationPayload,
     ) -> anyhow::Result<()> {
-        let url: String = format!("{}/v1/qa/validate", self.base_url.trim_end_matches('/'));
+        let url = &self.url_validate;
         tracing::debug!(
             target: "memex.qa",
             stage = "memory.http.validate.in",
@@ -315,7 +322,7 @@ impl HttpClient {
             qa_id = %payload.qa_id,
             result = ?payload.result
         );
-        let req = self.http.post(url.clone()).json(&payload);
+        let req = self.http.post(url).json(&payload);
         let resp = self
             .auth(req)
             .send()
@@ -332,7 +339,7 @@ impl HttpClient {
     }
 
     pub async fn task_grade(&self, prompt: String) -> anyhow::Result<Value> {
-        let url = format!("{}/v1/task/grade", self.base_url.trim_end_matches('/'));
+        let url = &self.url_task_grade;
         tracing::debug!(
             target: "memex.task",
             stage = "memory.http.task_grade.in",
@@ -340,7 +347,7 @@ impl HttpClient {
         );
         let req = self
             .http
-            .post(url.clone())
+            .post(url)
             .json(&serde_json::json!({ "prompt": prompt }));
         let resp = self
             .auth(req)

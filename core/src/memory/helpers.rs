@@ -1,29 +1,50 @@
+/// Collapse whitespace into single spaces without intermediate Vec allocation.
 pub(crate) fn one_line(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ")
+    let mut result = String::with_capacity(s.len());
+    let mut first = true;
+    for word in s.split_whitespace() {
+        if !first {
+            result.push(' ');
+        }
+        result.push_str(word);
+        first = false;
+    }
+    result
 }
 
+/// Truncate string to max_chars with "..." suffix. Optimized to avoid redundant char counting.
 pub(crate) fn truncate_clean(s: &str, max_chars: usize) -> String {
-    let mut t = s.trim().to_string();
-    t = t.replace("\r\n", "\n");
-    if t.chars().count() <= max_chars {
+    let t = s.trim().replace("\r\n", "\n");
+
+    // Fast path: byte length <= max_chars means char count <= max_chars (UTF-8 property)
+    if t.len() <= max_chars {
         return t;
     }
-    let mut out = String::new();
-    for (i, ch) in t.chars().enumerate() {
-        if i >= max_chars {
-            break;
-        }
-        out.push(ch);
+
+    // Need to count chars only when truncation may be needed
+    let truncated: String = t.chars().take(max_chars).collect();
+
+    // Check if we actually truncated anything
+    if truncated.len() == t.len() {
+        truncated
+    } else {
+        format!("{} ...", truncated)
     }
-    out.push_str(" ...");
-    out
 }
 
+/// Truncate string in middle with ".." suffix. Optimized to avoid redundant char counting.
 pub(crate) fn trim_mid(s: &str, max_chars: usize) -> String {
     let t = one_line(s);
-    if t.chars().count() <= max_chars {
+
+    // Fast path: byte length <= max_chars means char count <= max_chars
+    if t.len() <= max_chars {
         return t;
     }
+
     let head: String = t.chars().take(max_chars.saturating_sub(2)).collect();
-    format!("{head}..")
+    if head.len() == t.len() {
+        head
+    } else {
+        format!("{head}..")
+    }
 }

@@ -97,16 +97,13 @@ pub(crate) async fn post_run(
         );
 
         if let Some(hit_payload) = build_hit_payload(ctx.project_id, &decision) {
-            let used = hit_payload
-                .references
-                .iter()
-                .filter(|r| r.used == Some(true))
-                .count();
-            let shown = hit_payload
-                .references
-                .iter()
-                .filter(|r| r.shown == Some(true))
-                .count();
+            // Single-pass counting for used and shown references
+            let (used, shown) = hit_payload.references.iter().fold((0, 0), |(u, s), r| {
+                (
+                    u + usize::from(r.used == Some(true)),
+                    s + usize::from(r.shown == Some(true)),
+                )
+            });
             tracing::debug!(
                 target: "memex.qa",
                 stage = "memory.hit.in",

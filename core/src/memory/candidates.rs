@@ -1,6 +1,41 @@
 use regex::Regex;
+use std::sync::OnceLock;
 
 use crate::tool_event::{extract_tool_steps, ToolEvent, ToolEventLite, ToolStep};
+
+// Cached regex patterns for performance (compiled once, reused forever)
+static CMD_REGEX: OnceLock<Regex> = OnceLock::new();
+static ERR_REGEX: OnceLock<Regex> = OnceLock::new();
+static SECRET_PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
+
+fn cmd_regex() -> &'static Regex {
+    CMD_REGEX.get_or_init(|| {
+        Regex::new(
+            r#"^(?:\s*\$\s+|\s*(cargo|git|npm|pnpm|yarn|bun|go|pytest|python|pip|uv|uvx|docker|kubectl)\b)"#,
+        )
+        .expect("CMD_REGEX is valid")
+    })
+}
+
+fn err_regex() -> &'static Regex {
+    ERR_REGEX.get_or_init(|| {
+        Regex::new(r#"(?i)\b(error|failed|panic|exception|traceback)\b"#)
+            .expect("ERR_REGEX is valid")
+    })
+}
+
+fn secret_patterns() -> &'static [Regex] {
+    SECRET_PATTERNS.get_or_init(|| {
+        vec![
+            Regex::new(r"(?i)\b(sk-[A-Za-z0-9]{20,})\b").unwrap(),
+            Regex::new(r"\bAKIA[0-9A-Z]{16}\b").unwrap(),
+            Regex::new(r"(?i)\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b").unwrap(),
+            Regex::new(r"\beyJ[A-Za-z0-9_\-]+=*\.[A-Za-z0-9_\-]+=*\.[A-Za-z0-9_\-]+=*\b").unwrap(),
+            Regex::new(r"-----BEGIN (RSA|EC|OPENSSH|DSA)? ?PRIVATE KEY-----").unwrap(),
+            Regex::new(r"(?i)\b[a-z]+:\/\/[^\/\s:]+:[^\/\s@]+@").unwrap(),
+        ]
+    })
+}
 
 use super::helpers::{one_line, trim_mid, truncate_clean};
 use super::types::{CandidateDraft, CandidateExtractConfig};
@@ -176,10 +211,7 @@ fn extract_command_block(text: &str, context_lines: usize) -> Option<String> {
         return None;
     }
 
-    let cmd_re = Regex::new(
-        r#"^(?:\s*\$\s+|\s*(cargo|git|npm|pnpm|yarn|bun|go|pytest|python|pip|uv|uvx|docker|kubectl)\b)"#,
-    )
-    .ok()?;
+    let cmd_re = cmd_regex();
 
     let mut last_idx: Option<usize> = None;
     for (i, l) in lines.iter().enumerate() {
@@ -215,7 +247,7 @@ fn extract_error_hint(text: &str) -> Option<String> {
         return None;
     }
 
-    let err_re = Regex::new(r#"(?i)\b(error|failed|panic|exception|traceback)\b"#).ok()?;
+    let err_re = err_regex();
 
     for l in lines.iter().rev() {
         let s = l.trim();
@@ -308,8 +340,7 @@ fn infer_tags(user_query: &str, answer: &str, tool_events: &[ToolEventLite]) -> 
 }
 
 fn contains_secret(s: &str) -> bool {
-    let patterns = secret_patterns();
-    patterns.iter().any(|re| re.is_match(s))
+    secret_patterns().iter().any(|re| re.is_match(s))
 }
 
 fn redact_secrets(s: &str) -> String {
@@ -318,15 +349,4 @@ fn redact_secrets(s: &str) -> String {
         out = re.replace_all(&out, "[REDACTED]").to_string();
     }
     out
-}
-
-fn secret_patterns() -> Vec<Regex> {
-    vec![
-        Regex::new(r"(?i)\b(sk-[A-Za-z0-9]{20,})\b").unwrap(),
-        Regex::new(r"\bAKIA[0-9A-Z]{16}\b").unwrap(),
-        Regex::new(r"(?i)\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b").unwrap(),
-        Regex::new(r"\beyJ[A-Za-z0-9_\-]+=*\.[A-Za-z0-9_\-]+=*\.[A-Za-z0-9_\-]+=*\b").unwrap(),
-        Regex::new(r"-----BEGIN (RSA|EC|OPENSSH|DSA)? ?PRIVATE KEY-----").unwrap(),
-        Regex::new(r"(?i)\b[a-z]+:\/\/[^\/\s:]+:[^\/\s@]+@").unwrap(),
-    ]
 }

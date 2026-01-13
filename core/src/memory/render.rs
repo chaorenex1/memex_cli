@@ -1,37 +1,42 @@
+use std::fmt::Write;
+
 use crate::gatekeeper::InjectItem;
 
 use super::helpers::{one_line, truncate_clean};
 use super::types::InjectConfig;
 
+/// Render memory context for prompt injection. Optimized to minimize allocations.
 pub fn render_memory_context(items: &[InjectItem], cfg: &InjectConfig) -> String {
     if items.is_empty() {
         return String::new();
     }
 
-    let mut out = String::new();
+    // Pre-allocate estimated capacity to avoid reallocations
+    let mut out = String::with_capacity(items.len() * 500);
     out.push_str("[MEMORY_CONTEXT v1]\n");
     out.push_str("The following items are retrieved from the memory system. Prefer using them when relevant.\n");
     out.push_str("If you use an item, include its anchor exactly once in your final answer: [QA_REF <qa_id>].\n\n");
 
     for (idx, it) in items.iter().take(cfg.max_items).enumerate() {
         let n = idx + 1;
-        out.push_str(&format!("{n}) [QA_REF {}]\n", it.qa_id));
-        out.push_str(&format!("Q: {}\n", one_line(&it.question)));
+        // Use write! macro to avoid intermediate String allocations
+        let _ = writeln!(out, "{n}) [QA_REF {}]", it.qa_id);
+        let _ = writeln!(out, "Q: {}", one_line(&it.question));
         let a = pick_answer(it, cfg.max_answer_chars);
-        out.push_str(&format!("A: {}\n", a));
+        let _ = writeln!(out, "A: {}", a);
 
         if cfg.include_meta_line {
-            out.push_str(&format!(
-                "Meta: level={} trust={:.2} score={:.2} tags={}\n",
-                it.validation_level,
-                it.trust,
-                it.score,
-                if it.tags.is_empty() {
-                    "-".to_string()
-                } else {
-                    it.tags.join(",")
-                }
-            ));
+            let tags_str = if it.tags.is_empty() {
+                "-"
+            } else {
+                // Only join when needed, avoid allocation if tags is empty
+                &it.tags.join(",")
+            };
+            let _ = writeln!(
+                out,
+                "Meta: level={} trust={:.2} score={:.2} tags={}",
+                it.validation_level, it.trust, it.score, tags_str
+            );
         }
         out.push('\n');
     }
