@@ -8,7 +8,7 @@ use crate::tool_event::{build_tool_insights, ToolEvent};
 
 use super::config::GatekeeperConfig;
 use super::decision::{GatekeeperDecision, HitRef, InjectItem, SearchMatch, ValidatePlan};
-use super::signals::{build_signals, grade_validation_signal, SignalHeuristics};
+use super::signals::{build_signals, get_signal_heuristics, grade_validation_signal};
 
 /// Prepare inject list based solely on matches and config.
 /// Used in pre-run phase where RunOutcome doesn't exist yet.
@@ -205,13 +205,13 @@ impl Gatekeeper {
         let insights = build_tool_insights(tool_events);
         let corr = &insights.correlation;
 
-        let heur = SignalHeuristics::default();
+        let heur = get_signal_heuristics();
         let sig = grade_validation_signal(
             run.exit_code,
             &run.stdout_tail,
             &run.stderr_tail,
             run.used_qa_ids.len(),
-            &heur,
+            heur,
             insights.failing_tools.len(),
         );
 
@@ -354,15 +354,29 @@ fn extract_i32(meta: &Value, key: &str) -> Option<i32> {
 
 fn digest_cheap(s: &str, head_chars: usize, tail_chars: usize) -> Value {
     let len = s.len();
-    let head = s.chars().take(head_chars).collect::<String>();
-    let tail = s
-        .chars()
-        .rev()
-        .take(tail_chars)
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect::<String>();
+
+    // Extract head: take first N chars
+    let head: String = s.chars().take(head_chars).collect();
+
+    // Extract tail: compute byte offset directly to avoid double iteration
+    let tail = if tail_chars == 0 {
+        String::new()
+    } else {
+        // Find the byte index where the last tail_chars characters start
+        let char_count = s.chars().count();
+        if char_count <= tail_chars {
+            s.to_string()
+        } else {
+            let skip_count = char_count - tail_chars;
+            // Find byte offset by iterating char_indices
+            let byte_offset = s
+                .char_indices()
+                .nth(skip_count)
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            s[byte_offset..].to_string()
+        }
+    };
 
     serde_json::json!({ "len": len, "head": head, "tail": tail })
 }

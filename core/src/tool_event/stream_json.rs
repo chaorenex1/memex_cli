@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
 use chrono::Local;
 
@@ -11,10 +12,22 @@ use crate::tool_event::ToolEvent;
 /// It is intentionally best-effort:
 /// - Ignores non-JSON lines.
 /// - Maps known shapes into the internal ToolEvent schema.
-#[derive(Default)]
 pub struct StreamJsonToolEventParser {
     // Some formats emit tool_result without repeating tool_name; keep a short-lived mapping.
     pending_tool_name_by_id: HashMap<String, String>,
+    // Cached timestamp for performance (refreshed every 50ms)
+    cached_ts: String,
+    last_ts_refresh: Instant,
+}
+
+impl Default for StreamJsonToolEventParser {
+    fn default() -> Self {
+        Self {
+            pending_tool_name_by_id: HashMap::new(),
+            cached_ts: Local::now().to_rfc3339(),
+            last_ts_refresh: Instant::now(),
+        }
+    }
 }
 
 impl StreamJsonToolEventParser {
@@ -22,8 +35,19 @@ impl StreamJsonToolEventParser {
         Self::default()
     }
 
+    /// Get current timestamp, refreshing cache if stale (>50ms)
+    #[inline]
+    fn current_ts(&mut self) -> String {
+        const REFRESH_INTERVAL_MS: u128 = 50;
+        if self.last_ts_refresh.elapsed().as_millis() >= REFRESH_INTERVAL_MS {
+            self.cached_ts = Local::now().to_rfc3339();
+            self.last_ts_refresh = Instant::now();
+        }
+        self.cached_ts.clone()
+    }
+
     pub fn parse_value(&mut self, v: &Value) -> Option<ToolEvent> {
-        let ts = Some(Local::now().to_rfc3339());
+        let ts = Some(self.current_ts());
         // Claude stream-json
         // Shape examples (simplified):
         // - {"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"TodoWrite","input":{...}}]}}
