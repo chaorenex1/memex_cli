@@ -50,5 +50,9 @@ tower-http = { workspace = true, features = ["fs"] }
 arboard = { workspace = true }
 dirs = { workspace = true }
 
+[build-dependencies]
+# Windows resource compiler for embedding icon and version info
+winres = { workspace = true }
+
 [lints]
 workspace = true

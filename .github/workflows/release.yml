@@ -13,9 +13,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing version: $VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          echo "## 🚀 Release v${{ steps.version.outputs.VERSION }}" > RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "### 📦 Assets" >> RELEASE_NOTES.md
+          echo "- \`memex-cli-aarch64-apple-darwin.tar.gz\` - macOS ARM64 (Apple Silicon)" >> RELEASE_NOTES.md
+          echo "- \`memex-cli-x86_64-apple-darwin.tar.gz\` - macOS Intel" >> RELEASE_NOTES.md
+          echo "- \`memex-cli-x86_64-unknown-linux-gnu.tar.gz\` - Linux x64" >> RELEASE_NOTES.md
+          echo "- \`memex-cli-x86_64-pc-windows-msvc.zip\` - Windows x64" >> RELEASE_NOTES.md
+          echo "- \`memex-env-scripts.tar.gz\` / \`.zip\` - Environment setup scripts" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "### 📝 Changes" >> RELEASE_NOTES.md
+          # Get commits since last tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            echo "" >> RELEASE_NOTES.md
+            git log $PREV_TAG..HEAD --pretty=format:"- %s (%h)" >> RELEASE_NOTES.md
+          else
+            echo "- Initial release" >> RELEASE_NOTES.md
+          fi
+
       - uses: taiki-e/create-gh-release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          title: "v${{ steps.version.outputs.VERSION }}"
+          body-path: RELEASE_NOTES.md
 
   build:
     needs: create-release
@@ -41,6 +73,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Show version info
+        run: |
+          echo "Building memex-cli for ${{ matrix.target }}"
+          echo "Git ref: ${{ github.ref }}"
+          echo "Version: ${GITHUB_REF#refs/tags/v}"
+        shell: bash
 
       - name: Install cross-compilation tools
         uses: taiki-e/setup-cross-toolchain-action@v1

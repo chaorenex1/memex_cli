@@ -29,7 +29,7 @@ impl<P: ToolEventParser> ToolEventRuntime<P> {
 
         if let Some(out) = &self.events_out {
             // Use to_writer with pre-allocated buffer for better performance
-            let mut buf = Vec::with_capacity(512);
+            let mut buf = Vec::with_capacity(1024);
             if serde_json::to_writer(&mut buf, &ev).is_ok() {
                 // SAFETY: serde_json always produces valid UTF-8
                 let s = unsafe { String::from_utf8_unchecked(buf) };
@@ -56,7 +56,7 @@ impl<P: ToolEventParser> ToolEventRuntime<P> {
 
             if let Some(out) = &self.events_out {
                 // Use to_writer with pre-allocated buffer for better performance
-                let mut buf = Vec::with_capacity(512);
+                let mut buf = Vec::with_capacity(1024);
                 if serde_json::to_writer(&mut buf, &ev).is_ok() {
                     // SAFETY: serde_json always produces valid UTF-8
                     let s = unsafe { String::from_utf8_unchecked(buf) };

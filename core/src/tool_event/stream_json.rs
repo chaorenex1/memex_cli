@@ -37,17 +37,17 @@ impl StreamJsonToolEventParser {
 
     /// Get current timestamp, refreshing cache if stale (>50ms)
     #[inline]
-    fn current_ts(&mut self) -> String {
+    fn current_ts(&mut self) -> &str {
         const REFRESH_INTERVAL_MS: u128 = 50;
         if self.last_ts_refresh.elapsed().as_millis() >= REFRESH_INTERVAL_MS {
             self.cached_ts = Local::now().to_rfc3339();
             self.last_ts_refresh = Instant::now();
         }
-        self.cached_ts.clone()
+        &self.cached_ts
     }
 
     pub fn parse_value(&mut self, v: &Value) -> Option<ToolEvent> {
-        let ts = Some(self.current_ts());
+        let ts = Some(self.current_ts().to_string());
         // Claude stream-json
         // Shape examples (simplified):
         // - {"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"TodoWrite","input":{...}}]}}
