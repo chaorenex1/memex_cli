@@ -35,12 +35,12 @@ jobs:
           echo "" >> RELEASE_NOTES.md
           echo "**Windows (PowerShell):**" >> RELEASE_NOTES.md
           echo "\`\`\`powershell" >> RELEASE_NOTES.md
-          echo "irm https://github.com/chaorenex1/memex-cli/releases/latest/download/install_memex.bat | iex" >> RELEASE_NOTES.md
+          echo "irm https://github.com/chaorenex1/memex-cli/releases/latest/download/install_memex.ps1 | iex" >> RELEASE_NOTES.md
           echo "\`\`\`" >> RELEASE_NOTES.md
           echo "" >> RELEASE_NOTES.md
           echo "### 📦 Assets" >> RELEASE_NOTES.md
           echo "- \`install_memex.sh.tar.gz\` - Installer script for Linux/macOS" >> RELEASE_NOTES.md
-          echo "- \`install_memex.bat.zip\` - Installer script for Windows" >> RELEASE_NOTES.md
+          echo "- \`install_memex.ps1.zip\` - Installer script for Windows" >> RELEASE_NOTES.md
           echo "- \`memex-cli-aarch64-apple-darwin.tar.gz\` - macOS ARM64 (Apple Silicon)" >> RELEASE_NOTES.md
           echo "- \`memex-cli-x86_64-apple-darwin.tar.gz\` - macOS Intel" >> RELEASE_NOTES.md
           echo "- \`memex-cli-x86_64-unknown-linux-gnu.tar.gz\` - Linux x64" >> RELEASE_NOTES.md
@@ -210,7 +210,9 @@ jobs:
       - name: Package memex-env scripts for release
         run: |
           mkdir -p release-artifacts/scripts
+          mkdir -p release-artifacts/installer
           cp memex-env.sh memex-env.ps1 memex-env.bat release-artifacts/scripts/
+          cp install_memex.sh install_memex.bat install_memex.ps1 release-artifacts/installer/
           cd release-artifacts
           tar -czf memex-env-scripts.tar.gz scripts/
           zip -r memex-env-scripts.zip scripts/
@@ -219,27 +221,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            release-artifacts/memex-env-scripts.tar.gz
-            release-artifacts/memex-env-scripts.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Package install_memex scripts for release
-        run: |
-          mkdir -p release-artifacts/installer
-          cp install_memex.sh install_memex.bat release-artifacts/installer/
-          # Also create archived versions for direct download
-          cd release-artifacts/installer
-          tar -czf ../install_memex.sh.tar.gz install_memex.sh
-          zip -r ../install_memex.bat.zip install_memex.bat
-
-      - name: Upload install_memex scripts to release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
             release-artifacts/installer/install_memex.sh
             release-artifacts/installer/install_memex.bat
-            release-artifacts/installer/install_memex.sh.tar.gz
-            release-artifacts/installer/install_memex.bat.zip
+            release-artifacts/installer/install_memex.ps1
+            release-artifacts/memex-env-scripts.tar.gz
+            release-artifacts/memex-env-scripts.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

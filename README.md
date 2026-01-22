@@ -21,7 +21,7 @@ curl -sSL https://github.com/chaorenex1/memex-cli/releases/latest/download/insta
 
 **Windows (PowerShell):**
 ```powershell
-irm https://github.com/chaorenex1/memex-cli/releases/latest/download/install_memex.bat | iex
+irm https://github.com/chaorenex1/memex-cli/releases/latest/download/install_memex.ps1 | iex
 ```
 
 安装完成后，新终端中运行 `memex-cli --help` 验证。
