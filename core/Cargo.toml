@@ -1,6 +1,6 @@
 [package]
 name = "memex-core"
-version = "1.0.7"
+version = "1.0.9"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
@@ -53,9 +53,22 @@ mockito = { workspace = true }
 pretty_assertions = { workspace = true }
 tracing-subscriber = { workspace = true }
 criterion = { workspace = true }
+memchr = "2.7"
 
 [[bench]]
 name = "stdio_perf"
+harness = false
+
+[[bench]]
+name = "hotspot_analysis"
+harness = false
+
+[[bench]]
+name = "stream_json_comparison"
+harness = false
+
+[[bench]]
+name = "stream_json_v2_comparison"
 harness = false
 
 [lints]

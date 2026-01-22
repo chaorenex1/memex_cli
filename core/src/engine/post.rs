@@ -24,7 +24,7 @@ pub(crate) async fn post_run(
     shown_qa_ids: Vec<String>,
     user_query: &str,
 ) -> Result<(RunOutcome, GatekeeperDecision), RunnerError> {
-    tracing::debug!(
+    tracing::info!(
         target: "memex.qa",
         stage = "post.start",
         project_id = %ctx.project_id,
@@ -45,7 +45,7 @@ pub(crate) async fn post_run(
         used_qa_ids: crate::gatekeeper::extract_qa_refs(&run.stdout_tail),
     };
 
-    tracing::debug!(
+    tracing::info!(
         target: "memex.qa",
         stage = "post.used_refs",
         used = run_outcome.used_qa_ids.len()
@@ -104,7 +104,7 @@ pub(crate) async fn post_run(
                     s + usize::from(r.shown == Some(true)),
                 )
             });
-            tracing::debug!(
+            tracing::info!(
                 target: "memex.qa",
                 stage = "memory.hit.in",
                 references = hit_payload.references.len(),
@@ -123,7 +123,7 @@ pub(crate) async fn post_run(
         }
         for v in build_validate_payloads(ctx.project_id, &decision) {
             let qa_id = v.qa_id.clone();
-            tracing::debug!(
+            tracing::info!(
                 target: "memex.qa",
                 stage = "memory.validate.in",
                 qa_id = %qa_id,
@@ -138,7 +138,7 @@ pub(crate) async fn post_run(
                     "Failed to record validation (non-fatal)"
                 );
             }
-            tracing::debug!(target: "memex.qa", stage = "memory.validate.out");
+            tracing::info!(target: "memex.qa", stage = "memory.validate.out");
         }
         if decision.should_write_candidate && !candidate_drafts.is_empty() {
             let payloads = build_candidate_payloads(ctx.project_id, &candidate_drafts);
@@ -161,7 +161,7 @@ pub(crate) async fn post_run(
         }
     }
 
-    tracing::debug!(
+    tracing::info!(
         target: "memex.qa",
         stage = "post.end",
         should_write_candidate = decision.should_write_candidate,

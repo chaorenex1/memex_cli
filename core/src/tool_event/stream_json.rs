@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
 use chrono::Local;
 
@@ -6,15 +7,39 @@ use serde_json::Value;
 
 use crate::tool_event::ToolEvent;
 
+// Event type constants (avoid .to_string() allocations)
+const EVENT_TYPE_EVENT_START: &str = "event.start";
+const EVENT_TYPE_EVENT_END: &str = "event.end";
+const EVENT_TYPE_TOOL_REQUEST: &str = "tool.request";
+const EVENT_TYPE_TOOL_RESULT: &str = "tool.result";
+const EVENT_TYPE_ASSISTANT_OUTPUT: &str = "assistant.output";
+const EVENT_TYPE_ASSISTANT_REASONING: &str = "assistant.reasoning";
+
+// Special string markers
+const NO_CONTENT: &str = "(no content)";
+const EMPTY_MESSAGE: &str = "{}";
+
 /// Parses "stream-json" style lines emitted by external CLIs (e.g. codex/claude/gemini).
 ///
 /// It is intentionally best-effort:
 /// - Ignores non-JSON lines.
 /// - Maps known shapes into the internal ToolEvent schema.
-#[derive(Default)]
 pub struct StreamJsonToolEventParser {
     // Some formats emit tool_result without repeating tool_name; keep a short-lived mapping.
     pending_tool_name_by_id: HashMap<String, String>,
+    // Cached timestamp for performance (refreshed every 50ms)
+    cached_ts: String,
+    last_ts_refresh: Instant,
+}
+
+impl Default for StreamJsonToolEventParser {
+    fn default() -> Self {
+        Self {
+            pending_tool_name_by_id: HashMap::new(),
+            cached_ts: Local::now().to_rfc3339(),
+            last_ts_refresh: Instant::now(),
+        }
+    }
 }
 
 impl StreamJsonToolEventParser {
@@ -22,13 +47,101 @@ impl StreamJsonToolEventParser {
         Self::default()
     }
 
+    /// Get current timestamp, refreshing cache if stale (>50ms)
+    #[inline]
+    fn current_ts(&mut self) -> &str {
+        const REFRESH_INTERVAL_MS: u128 = 50;
+        if self.last_ts_refresh.elapsed().as_millis() >= REFRESH_INTERVAL_MS {
+            self.cached_ts = Local::now().to_rfc3339();
+            self.last_ts_refresh = Instant::now();
+        }
+        &self.cached_ts
+    }
+
+    #[inline]
+    fn make_event_type(s: &str) -> String {
+        String::from(s)
+    }
+
     pub fn parse_value(&mut self, v: &Value) -> Option<ToolEvent> {
-        let ts = Some(Local::now().to_rfc3339());
-        // Claude stream-json
-        // Shape examples (simplified):
-        // - {"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"TodoWrite","input":{...}}]}}
-        // - {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"...","content":"..."}]}}
-        if v.get("type").and_then(|x| x.as_str()) == Some("system") && v.get("subtype").is_some() {
+        // Extract type once - this is the primary optimization
+        // Reduces 20+ v.get("type") calls to just 1
+        let type_str = v.get("type").and_then(|x| x.as_str())?;
+
+        let ts = Some(self.current_ts().to_string());
+
+        // === HOT PATH: Gemini tool_use/tool_result (most common) ===
+        match type_str {
+            "tool_use" => {
+                // Fast path: extract all fields in one pass
+                let tool_name = v.get("tool_name")?.as_str()?;
+                let tool_id = v.get("tool_id")?.as_str()?;
+                let args = v.get("parameters").cloned().unwrap_or(Value::Null);
+
+                // Cache tool name for result lookup
+                self.pending_tool_name_by_id
+                    .insert(tool_id.to_string(), tool_name.to_string());
+
+                let event_ts = v
+                    .get("timestamp")
+                    .and_then(|x| x.as_str())
+                    .map(|x| x.to_string());
+
+                return Some(ToolEvent {
+                    v: 1,
+                    event_type: Self::make_event_type(EVENT_TYPE_TOOL_REQUEST),
+                    ts: event_ts.or(ts),
+                    run_id: None,
+                    id: Some(tool_id.to_string()),
+                    tool: Some(tool_name.to_string()),
+                    action: None,
+                    args,
+                    ok: None,
+                    output: None,
+                    error: None,
+                    rationale: None,
+                });
+            }
+            "tool_result" => {
+                // Fast path: extract all fields in one pass
+                let tool_id = v.get("tool_id")?.as_str()?;
+                let ok = match v.get("status").and_then(|x| x.as_str()) {
+                    Some("success") => Some(true),
+                    Some("error") => Some(false),
+                    _ => None,
+                };
+                let output = v.get("output").cloned();
+
+                let event_ts = v
+                    .get("timestamp")
+                    .and_then(|x| x.as_str())
+                    .map(|x| x.to_string());
+
+                // Look up tool name from cache
+                let tool = self.pending_tool_name_by_id.get(tool_id).cloned();
+
+                return Some(ToolEvent {
+                    v: 1,
+                    event_type: Self::make_event_type(EVENT_TYPE_TOOL_RESULT),
+                    ts: event_ts.or(ts),
+                    run_id: None,
+                    id: Some(tool_id.to_string()),
+                    tool,
+                    action: None,
+                    args: Value::Null,
+                    ok,
+                    output,
+                    error: None,
+                    rationale: None,
+                });
+            }
+            _ => {}
+        }
+
+        // === COLD PATH: Other event types ===
+
+        // Claude: system with subtype
+        if type_str == "system" && v.get("subtype").is_some() {
             let session_id = v
                 .get("session_id")
                 .and_then(|x| x.as_str())
@@ -36,7 +149,7 @@ impl StreamJsonToolEventParser {
             let subtype = v.get("subtype").and_then(|x| x.as_str()).unwrap_or("");
             return Some(ToolEvent {
                 v: 1,
-                event_type: "event.start".to_string(),
+                event_type: Self::make_event_type(EVENT_TYPE_EVENT_START),
                 ts,
                 run_id: session_id,
                 id: None,
@@ -49,13 +162,15 @@ impl StreamJsonToolEventParser {
                 rationale: None,
             });
         }
-        if v.get("type").and_then(|x| x.as_str()) == Some("result") && v.get("subtype").is_some() {
+
+        // Claude: result with subtype
+        if type_str == "result" && v.get("subtype").is_some() {
             let subtype = v.get("subtype").and_then(|x| x.as_str()).unwrap_or("");
             let result = v.get("result").cloned().unwrap_or(Value::Null);
             let is_error = v.get("is_error").and_then(|x| x.as_bool()).unwrap_or(false);
             return Some(ToolEvent {
                 v: 1,
-                event_type: "event.end".to_string(),
+                event_type: Self::make_event_type(EVENT_TYPE_EVENT_END),
                 ts,
                 run_id: None,
                 id: None,
@@ -68,106 +183,92 @@ impl StreamJsonToolEventParser {
                 rationale: None,
             });
         }
-        if v.get("type").and_then(|x| x.as_str()) == Some("assistant") {
+
+        // Claude: assistant with nested content
+        if type_str == "assistant" {
             if let Some(assistant_message) = v.get("message").and_then(|c| c.as_object()) {
-                let default_message = Value::String("{}".to_string());
+                let default_message = Value::String(EMPTY_MESSAGE.to_string());
                 let message = assistant_message.get("message").unwrap_or(&default_message);
                 let items = assistant_message
                     .get("content")
                     .and_then(|c| c.as_array())?;
+
                 for item in items {
-                    if item.get("type").and_then(|x| x.as_str()) == Some("tool_use") {
-                        let id = item
-                            .get("id")
-                            .and_then(|x| x.as_str())
-                            .map(|x| x.to_string());
-                        let tool = item
-                            .get("name")
-                            .and_then(|x| x.as_str())
-                            .map(|x| x.to_string());
-                        let args = item.get("input").cloned().unwrap_or(Value::Null);
-                        let name = item.get("name").and_then(|x| x.as_str());
+                    let item_type = item.get("type")?.as_str()?;
 
-                        if let (Some(id), Some(tool)) = (id.clone(), tool.clone()) {
-                            self.pending_tool_name_by_id.insert(id, tool);
+                    match item_type {
+                        "tool_use" => {
+                            let id = item.get("id")?.as_str()?.to_string();
+                            let tool = item.get("name")?.as_str()?.to_string();
+                            let args = item.get("input").cloned().unwrap_or(Value::Null);
+                            let name = item.get("name")?.as_str();
+
+                            self.pending_tool_name_by_id
+                                .insert(id.clone(), tool.clone());
+
+                            return Some(ToolEvent {
+                                v: 1,
+                                event_type: Self::make_event_type(EVENT_TYPE_TOOL_REQUEST),
+                                ts: ts.clone(),
+                                run_id: None,
+                                id: Some(id),
+                                tool: Some(tool),
+                                action: name.map(|x| x.to_string()),
+                                args: args.clone(),
+                                ok: None,
+                                output: Some(args),
+                                error: None,
+                                rationale: None,
+                            });
                         }
-
-                        return Some(ToolEvent {
-                            v: 1,
-                            event_type: "tool.request".to_string(),
-                            ts,
-                            run_id: None,
-                            id,
-                            tool,
-                            action: name.map(|x| x.to_string()),
-                            args: args.clone(),
-                            ok: None,
-                            output: Some(args.clone()),
-                            error: None,
-                            rationale: None,
-                        });
-                    }
-
-                    if item.get("type").and_then(|x| x.as_str()) == Some("text") {
-                        let mut content = item
-                            .get("text")
-                            .and_then(|x| x.as_str())
-                            .map(|x| x.to_string())
-                            .unwrap_or_default();
-                        if content == "(no content)" {
-                            content = "".to_string();
+                        "text" | "thinking" => {
+                            let field = if item_type == "thinking" {
+                                "thinking"
+                            } else {
+                                "text"
+                            };
+                            let mut content = item
+                                .get(field)
+                                .and_then(|x| x.as_str())
+                                .map(|x| x.to_string())
+                                .unwrap_or_default();
+                            if content == NO_CONTENT {
+                                content = String::new();
+                            }
+                            return Some(ToolEvent {
+                                v: 1,
+                                event_type: if item_type == "thinking" {
+                                    Self::make_event_type(EVENT_TYPE_ASSISTANT_REASONING)
+                                } else {
+                                    Self::make_event_type(EVENT_TYPE_ASSISTANT_OUTPUT)
+                                },
+                                ts: ts.clone(),
+                                run_id: None,
+                                id: None,
+                                tool: None,
+                                action: Some(message.to_string()),
+                                args: Value::Null,
+                                ok: None,
+                                output: Some(Value::String(content)),
+                                error: None,
+                                rationale: None,
+                            });
                         }
-                        return Some(ToolEvent {
-                            v: 1,
-                            event_type: "assistant.output".to_string(),
-                            ts,
-                            run_id: None,
-                            id: None,
-                            tool: None,
-                            action: Some(message.to_string()),
-                            args: Value::Null,
-                            ok: None,
-                            output: Some(Value::String(content)),
-                            error: None,
-                            rationale: None,
-                        });
-                    }
-
-                    if item.get("type").and_then(|x| x.as_str()) == Some("thinking") {
-                        let mut content = item
-                            .get("thinking")
-                            .and_then(|x| x.as_str())
-                            .map(|x| x.to_string())
-                            .unwrap_or_default();
-                        if content == "(no content)" {
-                            content = "".to_string();
-                        }
-                        return Some(ToolEvent {
-                            v: 1,
-                            event_type: "assistant.reasoning".to_string(),
-                            ts,
-                            run_id: None,
-                            id: None,
-                            tool: None,
-                            action: Some(message.to_string()),
-                            args: Value::Null,
-                            ok: None,
-                            output: Some(Value::String(content)),
-                            error: None,
-                            rationale: None,
-                        });
+                        _ => {}
                     }
                 }
             }
         }
 
-        if v.get("type").and_then(|x| x.as_str()) == Some("user") {
+        // Claude: user with nested content
+        if type_str == "user" {
             if let Some(user_message) = v.get("message").and_then(|c| c.as_object()) {
-                let default_message = Value::String("{}".to_string());
+                let default_message = Value::String(EMPTY_MESSAGE.to_string());
                 let message = user_message.get("message").unwrap_or(&default_message);
                 let items = user_message.get("content").and_then(|c| c.as_array())?;
+
                 for item in items {
-                    if item.get("type").and_then(|x| x.as_str()) == Some("tool_result") {
+                    if item.get("type")?.as_str()? == "tool_result" {
                         let id = item
                             .get("tool_use_id")
                             .and_then(|x| x.as_str())
@@ -197,8 +298,8 @@ impl StreamJsonToolEventParser {
 
                         return Some(ToolEvent {
                             v: 1,
-                            event_type: "tool.result".to_string(),
-                            ts,
+                            event_type: Self::make_event_type(EVENT_TYPE_TOOL_RESULT),
+                            ts: ts.clone(),
                             run_id: None,
                             id,
                             tool,
@@ -211,19 +312,19 @@ impl StreamJsonToolEventParser {
                         });
                     }
 
-                    if item.get("type").and_then(|x| x.as_str()) == Some("text") {
+                    if item.get("type")?.as_str()? == "text" {
                         let mut content = item
                             .get("text")
                             .and_then(|x| x.as_str())
                             .map(|x| x.to_string())
                             .unwrap_or_default();
-                        if content == "(no content)" {
-                            content = "".to_string();
+                        if content == NO_CONTENT {
+                            content = String::new();
                         }
                         return Some(ToolEvent {
                             v: 1,
-                            event_type: "assistant.output".to_string(),
-                            ts,
+                            event_type: Self::make_event_type(EVENT_TYPE_ASSISTANT_OUTPUT),
+                            ts: ts.clone(),
                             run_id: None,
                             id: None,
                             tool: None,
@@ -239,18 +340,16 @@ impl StreamJsonToolEventParser {
             }
         }
 
-        // Gemini stream-json
-        if v.get("type").and_then(|x| x.as_str()) == Some("init") {
-            let type_ = v.get("type").and_then(|x| x.as_str()).unwrap_or("");
-
+        // Gemini: init
+        if type_str == "init" {
             return Some(ToolEvent {
                 v: 1,
-                event_type: "event.start".to_string(),
+                event_type: Self::make_event_type(EVENT_TYPE_EVENT_START),
                 ts,
                 run_id: None,
                 id: None,
                 tool: None,
-                action: Some(type_.to_string()),
+                action: Some(type_str.to_string()),
                 args: Value::Null,
                 ok: None,
                 output: Some(Value::String(v.to_string())),
@@ -259,8 +358,8 @@ impl StreamJsonToolEventParser {
             });
         }
 
-        if v.get("type").and_then(|x| x.as_str()) == Some("result") {
-            let type_ = v.get("type").and_then(|x| x.as_str()).unwrap_or("");
+        // Gemini: result (without subtype - different from Claude's result)
+        if type_str == "result" && v.get("subtype").is_some() {
             let status = v
                 .get("status")
                 .and_then(|x| x.as_str())
@@ -269,12 +368,12 @@ impl StreamJsonToolEventParser {
 
             return Some(ToolEvent {
                 v: 1,
-                event_type: "event.end".to_string(),
+                event_type: Self::make_event_type(EVENT_TYPE_EVENT_END),
                 ts,
                 run_id: None,
                 id: None,
                 tool: None,
-                action: Some(type_.to_string()),
+                action: Some(type_str.to_string()),
                 args: Value::Null,
                 ok: status,
                 output: Some(stats),
@@ -283,7 +382,8 @@ impl StreamJsonToolEventParser {
             });
         }
 
-        if v.get("type").and_then(|x| x.as_str()) == Some("message") {
+        // Gemini: message
+        if type_str == "message" {
             let role = v.get("role").and_then(|x| x.as_str()).unwrap_or("");
 
             if role == "assistant" {
@@ -291,7 +391,7 @@ impl StreamJsonToolEventParser {
 
                 return Some(ToolEvent {
                     v: 1,
-                    event_type: "assistant.output".to_string(),
+                    event_type: Self::make_event_type(EVENT_TYPE_ASSISTANT_OUTPUT),
                     ts,
                     run_id: None,
                     id: None,
@@ -306,82 +406,12 @@ impl StreamJsonToolEventParser {
             }
         }
 
-        if v.get("type").and_then(|x| x.as_str()) == Some("tool_use") {
-            let tool = v
-                .get("tool_name")
-                .and_then(|x| x.as_str())
-                .map(|x| x.to_string());
-            let id = v
-                .get("tool_id")
-                .and_then(|x| x.as_str())
-                .map(|x| x.to_string());
-            let ts = v
-                .get("timestamp")
-                .and_then(|x| x.as_str())
-                .map(|x| x.to_string());
-            let args = v.get("parameters").cloned().unwrap_or(Value::Null);
-
-            if let (Some(id), Some(tool)) = (id.clone(), tool.clone()) {
-                self.pending_tool_name_by_id.insert(id, tool);
-            }
-
-            return Some(ToolEvent {
-                v: 1,
-                event_type: "tool.request".to_string(),
-                ts,
-                run_id: None,
-                id,
-                tool,
-                action: None,
-                args,
-                ok: None,
-                output: None,
-                error: None,
-                rationale: None,
-            });
-        }
-
-        if v.get("type").and_then(|x| x.as_str()) == Some("tool_result") {
-            let id = v
-                .get("tool_id")
-                .and_then(|x| x.as_str())
-                .map(|x| x.to_string());
-            let ts = v
-                .get("timestamp")
-                .and_then(|x| x.as_str())
-                .map(|x| x.to_string());
-            let ok = match v.get("status").and_then(|x| x.as_str()) {
-                Some("success") => Some(true),
-                Some("error") => Some(false),
-                _ => None,
-            };
-            let output = v.get("output").cloned();
-
-            let tool = id
-                .as_ref()
-                .and_then(|tid| self.pending_tool_name_by_id.get(tid).cloned());
-
-            return Some(ToolEvent {
-                v: 1,
-                event_type: "tool.result".to_string(),
-                ts,
-                run_id: None,
-                id,
-                tool,
-                action: None,
-                args: Value::Null,
-                ok,
-                output,
-                error: None,
-                rationale: None,
-            });
-        }
-
-        if let Some(turn) = v.get("type").and_then(|x| x.as_str()) {
-            if turn == "turn.started" {
+        // Turn events
+        match type_str {
+            "turn.started" => {
                 return Some(ToolEvent {
                     v: 1,
-                    event_type: "event.start".to_string(),
+                    event_type: Self::make_event_type(EVENT_TYPE_EVENT_START),
                     ts,
                     run_id: None,
                     id: None,
@@ -392,12 +422,13 @@ impl StreamJsonToolEventParser {
                     output: None,
                     error: None,
                     rationale: None,
-                });
-            } else if turn == "turn.completed" {
+                })
+            }
+            "turn.completed" => {
                 let usage = v.get("usage").cloned().unwrap_or(Value::Null);
                 return Some(ToolEvent {
                     v: 1,
-                    event_type: "event.end".to_string(),
+                    event_type: Self::make_event_type(EVENT_TYPE_EVENT_END),
                     ts,
                     run_id: None,
                     id: None,
@@ -410,196 +441,188 @@ impl StreamJsonToolEventParser {
                     rationale: None,
                 });
             }
+            _ => {}
         }
-        // Codex stream-json
+
+        // === CODEX FORMAT: item field ===
         if let Some(item) = v.get("item") {
-            // Codex tool calls
-            if item.get("type").and_then(|x| x.as_str()) == Some("mcp_tool_call") {
-                let line_type = v.get("type").and_then(|x| x.as_str()).unwrap_or("");
-                let id = item
-                    .get("id")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.to_string());
+            return self.parse_codex_item(v, item, ts, type_str);
+        }
 
-                let tool = item
-                    .get("tool")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.to_string());
-                let server = item
-                    .get("server")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.to_string());
-                // let tool = match (server, tool) {
-                //     (Some(s), Some(t)) => Some(format!("{s}.{t}")),
-                //     (_, t) => t,
-                // };
+        None
+    }
 
+    /// Parse Codex format items (cold path)
+    fn parse_codex_item(
+        &mut self,
+        _v: &Value,
+        item: &Value,
+        ts: Option<String>,
+        type_str: &str,
+    ) -> Option<ToolEvent> {
+        let item_type = item.get("type")?.as_str()?;
+
+        match item_type {
+            "mcp_tool_call" => {
+                let id = item.get("id")?.as_str()?.to_string();
+                let tool = item.get("tool")?.as_str()?.to_string();
+                let server = item.get("server")?.as_str()?.to_string();
                 let args = item.get("arguments").cloned().unwrap_or(Value::Null);
 
-                if line_type == "item.started" {
+                match type_str {
+                    "item.started" => {
+                        return Some(ToolEvent {
+                            v: 1,
+                            event_type: Self::make_event_type(EVENT_TYPE_TOOL_REQUEST),
+                            ts,
+                            run_id: None,
+                            id: Some(id),
+                            tool: Some(server),
+                            action: Some(tool),
+                            args,
+                            ok: None,
+                            output: None,
+                            error: None,
+                            rationale: None,
+                        });
+                    }
+                    "item.completed" => {
+                        let status = item.get("status").and_then(|x| x.as_str()).unwrap_or("");
+                        let ok = match status {
+                            "completed" => Some(true),
+                            "failed" => Some(false),
+                            _ => None,
+                        };
+
+                        let output = item.get("result").cloned();
+                        let error = item
+                            .get("error")
+                            .and_then(|x| x.as_str())
+                            .map(|x| x.to_string());
+
+                        return Some(ToolEvent {
+                            v: 1,
+                            event_type: Self::make_event_type(EVENT_TYPE_TOOL_RESULT),
+                            ts,
+                            run_id: None,
+                            id: Some(id),
+                            tool: Some(server),
+                            action: Some(tool),
+                            args,
+                            ok,
+                            output,
+                            error,
+                            rationale: None,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            "agent_message" => {
+                if type_str == "item.completed" {
+                    let id = item.get("id")?.as_str()?.to_string();
+                    let text = item
+                        .get("text")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+
                     return Some(ToolEvent {
                         v: 1,
-                        event_type: "tool.request".to_string(),
+                        event_type: Self::make_event_type(EVENT_TYPE_ASSISTANT_OUTPUT),
                         ts,
                         run_id: None,
-                        id,
-                        tool: server,
-                        action: tool,
-                        args,
+                        id: Some(id),
+                        tool: None,
+                        action: None,
+                        args: Value::Null,
                         ok: None,
-                        output: None,
+                        output: Some(Value::String(text)),
                         error: None,
                         rationale: None,
                     });
                 }
-
-                if line_type == "item.completed" {
-                    let status = item.get("status").and_then(|x| x.as_str());
-                    let ok = match status {
-                        Some("completed") => Some(true),
-                        Some("failed") => Some(false),
-                        _ => None,
-                    };
-
-                    let output = item.get("result").cloned();
-                    let error = item
-                        .get("error")
+            }
+            "reasoning" => {
+                if type_str == "item.completed" {
+                    let id = item.get("id")?.as_str()?.to_string();
+                    let text = item
+                        .get("text")
                         .and_then(|x| x.as_str())
-                        .map(|x| x.to_string());
+                        .unwrap_or_default()
+                        .to_string();
 
                     return Some(ToolEvent {
                         v: 1,
-                        event_type: "tool.result".to_string(),
+                        event_type: Self::make_event_type(EVENT_TYPE_ASSISTANT_REASONING),
                         ts,
                         run_id: None,
-                        id,
-                        tool: server,
-                        action: tool,
-                        args,
-                        ok,
-                        output,
-                        error,
+                        id: Some(id),
+                        tool: None,
+                        action: None,
+                        args: Value::Null,
+                        ok: None,
+                        output: Some(Value::String(text)),
+                        error: None,
                         rationale: None,
                     });
                 }
             }
-
-            // Codex agent output (assistant text)
-            if v.get("type").and_then(|x| x.as_str()) == Some("item.completed")
-                && item.get("type").and_then(|x| x.as_str()) == Some("agent_message")
-            {
-                let id = item
-                    .get("id")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.to_string());
-                let text = item
-                    .get("text")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.to_string())
-                    .unwrap_or_default();
-
-                return Some(ToolEvent {
-                    v: 1,
-                    event_type: "assistant.output".to_string(),
-                    ts,
-                    run_id: None,
-                    id,
-                    tool: None,
-                    action: None,
-                    args: Value::Null,
-                    ok: None,
-                    output: Some(Value::String(text)),
-                    error: None,
-                    rationale: None,
-                });
-            }
-
-            // Codex reasoning trace (optional; keep structured but not treated as tool.*)
-            if v.get("type").and_then(|x| x.as_str()) == Some("item.completed")
-                && item.get("type").and_then(|x| x.as_str()) == Some("reasoning")
-            {
-                let id = item
-                    .get("id")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.to_string());
-                let text = item
-                    .get("text")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.to_string())
-                    .unwrap_or_default();
-
-                return Some(ToolEvent {
-                    v: 1,
-                    event_type: "assistant.reasoning".to_string(),
-                    ts,
-                    run_id: None,
-                    id,
-                    tool: None,
-                    action: None,
-                    args: Value::Null,
-                    ok: None,
-                    output: Some(Value::String(text)),
-                    error: None,
-                    rationale: None,
-                });
-            }
-
-            // Codex local command execution (best-effort mapping)
-            let is_cmd = item.get("type").and_then(|x| x.as_str()) == Some("command_execution");
-            if is_cmd {
-                let line_type = v.get("type").and_then(|x| x.as_str()).unwrap_or("");
-                let id = item
-                    .get("id")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.to_string());
+            "command_execution" => {
+                let id = item.get("id")?.as_str()?.to_string();
                 let command = item.get("command").cloned().unwrap_or(Value::Null);
 
-                if line_type == "item.started" {
-                    return Some(ToolEvent {
-                        v: 1,
-                        event_type: "tool.request".to_string(),
-                        ts,
-                        run_id: None,
-                        id,
-                        tool: Some("command_execution".to_string()),
-                        action: Some("exec".to_string()),
-                        args: serde_json::json!({ "command": command }),
-                        ok: None,
-                        output: None,
-                        error: None,
-                        rationale: None,
-                    });
-                }
+                match type_str {
+                    "item.started" => {
+                        return Some(ToolEvent {
+                            v: 1,
+                            event_type: Self::make_event_type(EVENT_TYPE_TOOL_REQUEST),
+                            ts: ts.clone(),
+                            run_id: None,
+                            id: Some(id.clone()),
+                            tool: Some("command_execution".to_string()),
+                            action: Some("exec".to_string()),
+                            args: serde_json::json!({ "command": command }),
+                            ok: None,
+                            output: None,
+                            error: None,
+                            rationale: None,
+                        });
+                    }
+                    "item.completed" => {
+                        let exit_code = item.get("exit_code")?.as_i64()?;
+                        let ok = exit_code == 0;
+                        let output = item.get("aggregated_output").cloned();
+                        let status = item.get("status")?.as_str()?.to_string();
+                        let error = if status == "failed" {
+                            Some("command_execution_failed".to_string())
+                        } else {
+                            None
+                        };
 
-                if line_type == "item.completed" {
-                    let exit_code = item.get("exit_code").and_then(|x| x.as_i64());
-                    let ok = exit_code.map(|c| c == 0);
-                    let output = item.get("aggregated_output").cloned();
-                    let status = item.get("status").and_then(|x| x.as_str()).unwrap_or("");
-                    let error = if status == "failed" {
-                        Some("command_execution_failed".to_string())
-                    } else {
-                        None
-                    };
-
-                    return Some(ToolEvent {
-                        v: 1,
-                        event_type: "tool.result".to_string(),
-                        ts,
-                        run_id: None,
-                        id,
-                        tool: Some("command_execution".to_string()),
-                        action: Some("exec".to_string()),
-                        args: serde_json::json!({ "command": command }),
-                        ok,
-                        output: output.or_else(|| {
-                            Some(serde_json::json!({ "exit_code": exit_code, "status": status }))
-                        }),
-                        error,
-                        rationale: None,
-                    });
+                        return Some(ToolEvent {
+                            v: 1,
+                            event_type: Self::make_event_type(EVENT_TYPE_TOOL_RESULT),
+                            ts,
+                            run_id: None,
+                            id: Some(id),
+                            tool: Some("command_execution".to_string()),
+                            action: Some("exec".to_string()),
+                            args: serde_json::json!({ "command": command }),
+                            ok: Some(ok),
+                            output: output.or_else(|| {
+                                Some(
+                                    serde_json::json!({ "exit_code": exit_code, "status": status }),
+                                )
+                            }),
+                            error,
+                            rationale: None,
+                        });
+                    }
+                    _ => {}
                 }
             }
+            _ => {}
         }
 
         None

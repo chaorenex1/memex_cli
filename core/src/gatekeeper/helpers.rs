@@ -1,8 +1,19 @@
-use regex::Regex;
 use std::collections::BTreeSet;
+use std::sync::OnceLock;
+
+use regex::Regex;
+
+// Cached regex for QA_REF extraction (compiled once, reused forever)
+static QA_REF_REGEX: OnceLock<Regex> = OnceLock::new();
+
+fn qa_ref_regex() -> &'static Regex {
+    QA_REF_REGEX.get_or_init(|| {
+        Regex::new(r"\[QA_REF\s+([A-Za-z0-9_\-]+)\]").expect("QA_REF_REGEX is valid")
+    })
+}
 
 pub fn extract_qa_refs(text: &str) -> Vec<String> {
-    let re = Regex::new(r"\[QA_REF\s+([A-Za-z0-9_\-]+)\]").expect("valid regex");
+    let re = qa_ref_regex();
     let mut set = BTreeSet::new();
 
     for cap in re.captures_iter(text) {

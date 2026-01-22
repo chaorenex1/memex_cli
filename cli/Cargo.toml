@@ -1,6 +1,6 @@
 [package]
 name = "memex-cli"
-version = "1.0.7"
+version = "1.0.9"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
@@ -49,6 +49,10 @@ tower-http = { workspace = true, features = ["fs"] }
 # System utilities
 arboard = { workspace = true }
 dirs = { workspace = true }
+
+[build-dependencies]
+# Windows resource compiler for embedding icon and version info
+winres = { workspace = true }
 
 [lints]
 workspace = true

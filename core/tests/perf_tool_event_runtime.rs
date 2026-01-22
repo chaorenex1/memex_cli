@@ -37,10 +37,12 @@ async fn perf_parse_stream_json_lines() {
     let mut rt = ToolEventRuntime::new(parser, None, Some("local-run-id".to_string()));
 
     // Prime discovery of session_id.
-    rt.observe_line(&init).await;
+    let mut events = 0usize;
+    if rt.observe_line(&init).await.is_some() {
+        events += 1;
+    }
 
     let start = Instant::now();
-    let mut events = 0usize;
 
     for i in 0..lines {
         let line = if i % 2 == 0 { tool_use } else { tool_result };
@@ -55,9 +57,10 @@ async fn perf_parse_stream_json_lines() {
     let events_per_sec = (events as f64) / secs;
 
     // Stable correctness checks (not timing-based).
-    assert_eq!(events, lines);
+    // events should be lines + 1 (init line)
+    assert_eq!(events, lines + 1);
     let evs = rt.take_events();
-    assert_eq!(evs.len(), lines);
+    assert_eq!(evs.len(), lines + 1);
     assert!(evs.iter().all(|e| e.run_id.as_deref() == Some(session_id)));
 
     eprintln!(

@@ -102,13 +102,17 @@ impl JsonlParser {
             }
         }
 
-        tool_events.push(ev.clone());
-
         if let Some(out) = events_out {
-            let s = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
-            out.send_line(s).await;
+            // Use to_writer with pre-allocated buffer to avoid intermediate allocations
+            let mut buf = Vec::with_capacity(1024);
+            if serde_json::to_writer(&mut buf, &ev).is_ok() {
+                // SAFETY: serde_json always produces valid UTF-8
+                let s = unsafe { String::from_utf8_unchecked(buf) };
+                out.send_line(s).await;
+            }
         }
 
+        tool_events.push(ev.clone());
         ev
     }
 
@@ -116,15 +120,25 @@ impl JsonlParser {
         let prefix = TOOL_EVENT_PREFIX.as_bytes();
         if buf.starts_with(prefix) {
             buf.drain(..prefix.len());
-            while matches!(buf.first(), Some(b' ' | b'\t')) {
-                buf.drain(..1);
+            // Batch drain whitespace after prefix
+            let skip = buf
+                .iter()
+                .position(|&b| !matches!(b, b' ' | b'\t'))
+                .unwrap_or(buf.len());
+            if skip > 0 {
+                buf.drain(..skip);
             }
         }
     }
 
     fn strip_ws(buf: &mut Vec<u8>) {
-        while matches!(buf.first(), Some(b' ' | b'\t' | b'\r' | b'\n')) {
-            buf.drain(..1);
+        // Batch drain all leading whitespace in single operation
+        let skip = buf
+            .iter()
+            .position(|&b| !matches!(b, b' ' | b'\t' | b'\r' | b'\n'))
+            .unwrap_or(buf.len());
+        if skip > 0 {
+            buf.drain(..skip);
         }
     }
 
@@ -232,9 +246,11 @@ impl StreamParser for JsonlParser {
                 }
             }
 
-            let ev = serde_json::from_value::<ToolEvent>(value.clone())
-                .ok()
-                .or_else(|| stream_json.parse_value(&value));
+            // Try stream_json parser first (takes reference, no clone needed)
+            // Fall back to direct deserialization only if stream_json doesn't match
+            let ev = stream_json
+                .parse_value(&value)
+                .or_else(|| serde_json::from_value::<ToolEvent>(value).ok());
 
             match ev {
                 Some(ev) => {
@@ -465,7 +481,14 @@ impl OutputSink for StdioSink {
                 }
             },
             OutputEvent::ToolEvent(ev) => {
-                let s = serde_json::to_string(ev.as_ref()).unwrap_or_else(|_| "{}".to_string());
+                // Use to_writer with pre-allocated buffer for better performance
+                let mut buf = Vec::with_capacity(1024);
+                let s = if serde_json::to_writer(&mut buf, ev.as_ref()).is_ok() {
+                    // SAFETY: serde_json always produces valid UTF-8
+                    unsafe { String::from_utf8_unchecked(buf) }
+                } else {
+                    "{}".to_string()
+                };
                 tracing::debug!(
                     target: "memex.stdout_audit",
                     kind = "tool_event",

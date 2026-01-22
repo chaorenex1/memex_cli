@@ -256,7 +256,7 @@ pub async fn handle_record_validation(
         success: Some(args.success),
         strong_signal: Some(args.success && args.confidence >= 0.8),
         source: Some("claude-code".to_string()),
-        context: Some(format!("confidence:{}", args.confidence)),
+        context: Some(serde_json::json!({"confidence": args.confidence})),
         client: None,
         ts: Some(chrono::Local::now().to_rfc3339()),
         payload: None,

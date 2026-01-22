@@ -22,7 +22,7 @@ pub(crate) struct PreRun {
 }
 
 pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun {
-    tracing::debug!(
+    tracing::info!(
         target: "memex.qa",
         stage = "pre.start",
         project_id = %ctx.project_id,
@@ -47,7 +47,7 @@ pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun
         min_score: ctx.memory_min_score,
     };
 
-    tracing::debug!(target: "memex.qa", stage = "memory.search.in");
+    tracing::info!(target: "memex.qa", stage = "memory.search.in");
     let matches = match mem.search(payload).await {
         Ok(m) => m,
         Err(e) => {
@@ -61,7 +61,7 @@ pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun
             };
         }
     };
-    tracing::debug!(
+    tracing::info!(
         target: "memex.qa",
         stage = "memory.search.out",
         ok = true,
@@ -76,7 +76,7 @@ pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun
 
     let inject_list = ctx.gatekeeper.prepare_inject(&matches);
 
-    tracing::debug!(
+    tracing::info!(
         target: "memex.qa",
         stage = "gatekeeper.inject",
         inject_count = inject_list.len()
@@ -86,7 +86,7 @@ pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun
     let merged = merge_prompt(user_query, &memory_ctx);
     let shown: Vec<String> = inject_list.iter().map(|x| x.qa_id.clone()).collect();
 
-    tracing::debug!(
+    tracing::info!(
         target: "memex.qa",
         stage = "pre.end",
         merged_query_len = merged.len(),

@@ -123,17 +123,17 @@ min_score = 0.2
 
 [prompt_inject]
 # Default values (defined in core/src/config/types.rs)
-placement = "system" # Options: system | user
-max_items = 3
-max_answer_chars = 900
+placement = "user" # Options: system | user
+max_items = 10
+max_answer_chars = 1000
 include_meta_line = true
 
 [gatekeeper]
 # Default values (defined in core/src/config/types.rs)
 provider = "standard"
-max_inject = 3
+max_inject = 10
 min_trust_show = 0.40
-min_level_inject = 2
+min_level_inject = 1
 min_level_fallback = 1
 block_if_consecutive_fail_ge = 3
 skip_if_top1_score_ge = 0.85
@@ -144,9 +144,9 @@ active_statuses = ["active", "verified"]
 
 [candidate_extract]
 # Default values (defined in core/src/config/types.rs)
-max_candidates = 1
-max_answer_chars = 1200
-min_answer_chars = 200
+max_candidates = 10
+max_answer_chars = 2000
+min_answer_chars = 100
 context_lines = 8
 tool_steps_max = 5
 tool_step_args_keys_max = 16
@@ -157,7 +157,7 @@ confidence = 0.45
 
 [events_out]
 # Default values (defined in core/src/config/types.rs)
-enabled = false
+enabled = true
 path = "./run.events.jsonl"
 channel_capacity = 2048
 drop_when_full = true

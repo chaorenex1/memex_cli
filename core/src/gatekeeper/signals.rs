@@ -1,9 +1,19 @@
+use std::sync::OnceLock;
+
 use regex::Regex;
 use serde_json::Value;
 
 use crate::gatekeeper::SearchMatch;
 use crate::runner::RunOutcome;
 use crate::tool_event::CorrelationStats;
+
+// Cached SignalHeuristics for performance (compiled once, reused forever)
+static SIGNAL_HEURISTICS: OnceLock<SignalHeuristics> = OnceLock::new();
+
+/// Get cached SignalHeuristics instance (Regex patterns compiled only once)
+pub fn get_signal_heuristics() -> &'static SignalHeuristics {
+    SIGNAL_HEURISTICS.get_or_init(SignalHeuristics::default)
+}
 
 #[derive(Debug, Clone)]
 pub struct ValidationSignal {

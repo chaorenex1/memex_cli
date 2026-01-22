@@ -44,7 +44,7 @@ pub fn build_validate_payloads(
             context: p.context.clone(),
             ts: Some(Local::now().to_rfc3339()),
             payload: Some(p.payload.clone()),
-            source: Some("mem-codecli".to_string()),
+            source: Some("memex-cli".to_string()),
             client: None,
             success: None,
         })

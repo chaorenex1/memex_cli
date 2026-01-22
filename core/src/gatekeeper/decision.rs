@@ -65,7 +65,7 @@ pub struct ValidatePlan {
     pub result: String,
     pub signal_strength: String,
     pub strong_signal: bool,
-    pub context: Option<String>,
+    pub context: Option<Value>,
     pub payload: Value,
 }
 

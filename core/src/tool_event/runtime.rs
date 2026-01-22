@@ -28,8 +28,13 @@ impl<P: ToolEventParser> ToolEventRuntime<P> {
         }
 
         if let Some(out) = &self.events_out {
-            let s = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
-            out.send_line(s).await;
+            // Use to_writer with pre-allocated buffer for better performance
+            let mut buf = Vec::with_capacity(1024);
+            if serde_json::to_writer(&mut buf, &ev).is_ok() {
+                // SAFETY: serde_json always produces valid UTF-8
+                let s = unsafe { String::from_utf8_unchecked(buf) };
+                out.send_line(s).await;
+            }
         }
     }
 
@@ -49,14 +54,17 @@ impl<P: ToolEventParser> ToolEventRuntime<P> {
                 }
             }
 
-            self.events.push(ev.clone());
-
             if let Some(out) = &self.events_out {
-                // For clean JSONL output, we might want to skip the prefix.
-                // For now, let's just send the raw JSON of the event.
-                let s = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
-                out.send_line(s).await;
+                // Use to_writer with pre-allocated buffer for better performance
+                let mut buf = Vec::with_capacity(1024);
+                if serde_json::to_writer(&mut buf, &ev).is_ok() {
+                    // SAFETY: serde_json always produces valid UTF-8
+                    let s = unsafe { String::from_utf8_unchecked(buf) };
+                    out.send_line(s).await;
+                }
             }
+
+            self.events.push(ev.clone());
             return Some(ev);
         }
         None

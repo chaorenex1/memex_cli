@@ -12,11 +12,25 @@
 
 ## 安装
 
-### 方式 A：下载 Release（推荐）
+### 一键安装（推荐）
 
-到 GitHub Releases 下载对应平台的 `memex-cli`（Windows 为 `memex-cli.exe`）。
+**Linux / macOS:**
+```bash
+curl -sSL https://github.com/chaorenex1/memex-cli/releases/latest/download/install_memex.sh | bash
+```
 
-### 方式 B：从源码构建
+**Windows (PowerShell):**
+```powershell
+irm https://github.com/chaorenex1/memex-cli/releases/latest/download/install_memex.bat | iex
+```
+
+安装完成后，新终端中运行 `memex-cli --help` 验证。
+
+### 方式 B：手动下载 Release
+
+到 [GitHub Releases](https://github.com/chaorenex1/memex-cli/releases) 下载对应平台的二进制文件。
+
+### 方式 C：从源码构建
 
 需要 Rust stable。
 

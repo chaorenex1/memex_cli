@@ -44,6 +44,6 @@ pub use crate::stdio::{
     StdioProtocolParser, StdioRunOpts, StdioTask, TextMarkers,
 };
 pub use crate::tool_event::{
-    CompositeToolEventParser, MultiToolEventLineParser, ToolEvent, ToolEventLite, ToolEventRuntime,
-    WrapperEvent, TOOL_EVENT_PREFIX,
+    CompositeToolEventParser, MultiToolEventLineParser, StreamJsonToolEventParser, ToolEvent,
+    ToolEventLite, ToolEventRuntime, WrapperEvent, TOOL_EVENT_PREFIX,
 };

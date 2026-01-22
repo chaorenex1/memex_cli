@@ -416,7 +416,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1478,7 +1478,7 @@ checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
 name = "memex-cli"
-version = "1.0.7"
+version = "1.0.9"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1502,11 +1502,12 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
+ "winres",
 ]
 
 [[package]]
 name = "memex-core"
-version = "1.0.7"
+version = "1.0.9"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1518,6 +1519,7 @@ dependencies = [
  "indicatif",
  "lazy_static",
  "lru",
+ "memchr",
  "memmap2",
  "mockito",
  "num_cpus",
@@ -1530,7 +1532,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
- "toml",
+ "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -1538,7 +1540,7 @@ dependencies = [
 
 [[package]]
 name = "memex-plugins"
-version = "1.0.7"
+version = "1.0.9"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2290,7 +2292,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2892,6 +2894,15 @@ dependencies = [
  "futures-sink",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "toml"
+version = "0.5.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -3693,6 +3704,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a5364e9d77fcdeeaa6062ced926ee3381faa2ee02d3eb83a5c27a8825540829"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winres"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b68db261ef59e9e52806f688020631e987592bd83619edccda9c47d42cde4f6c"
+dependencies = [
+ "toml 0.5.11",
 ]
 
 [[package]]

@@ -45,7 +45,7 @@ where
         include_meta_line: cfg.prompt_inject.include_meta_line,
     };
 
-    tracing::debug!(
+    tracing::info!(
         "run_with_query: run_id={}, inject_placement={:?}, inject_max_items={}",
         run_id,
         inject_cfg.placement,
@@ -89,7 +89,7 @@ where
     let matches = pre.matches;
     let memory_search_event = pre.memory_search_event;
 
-    tracing::debug!(
+    tracing::info!(
         "run_with_query: run_id={}, merged_query_len={}, shown_qa_ids={:?}, matches_len={}",
         run_id,
         merged_query.len(),
@@ -221,7 +221,11 @@ where
         "shown_qa_ids": run_outcome.shown_qa_ids,
     }));
     write_wrapper_event(events_out_tx.as_ref(), &exit_event).await;
-
+    tracing::info!(
+        "run completed: run_id={}, exit_code={}",
+        run_id,
+        run_outcome.exit_code
+    );
     Ok(run_outcome.exit_code)
 }
 
