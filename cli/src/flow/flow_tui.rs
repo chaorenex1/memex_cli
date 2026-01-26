@@ -9,7 +9,6 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::commands::cli::{Args, RunArgs};
-use crate::task_level::infer_task_level;
 use crate::tui::{restore_terminal, setup_terminal, TuiApp};
 use memex_plugins::plan::{build_runner_spec, PlanMode, PlanRequest};
 
@@ -109,15 +108,12 @@ pub async fn run_tui_flow(
                                         let query_services = services.clone();
 
                                         let plan_req = build_plan_request(
-                                            &query_services,
-                                            args,
                                             run_args,
                                             stream_format,
                                             project_id,
-                                            &user_input,
                                         )
                                         .await;
-                                        let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
+                                        let (runner_spec,) = build_runner_spec(cfg, plan_req)?;
 
                                         let events_out_tx = events_out_tx.clone();
                                         let runner_tx = runner_tx.clone();
@@ -142,20 +138,26 @@ pub async fn run_tui_flow(
                                                     project_id: project_id.to_string(),
                                                     events_out_tx,
                                                     services: query_services,
-                                                    wrapper_start_data: start_data,
+                                                    wrapper_start_data: None,
                                                 },
                                                 |input| async move {
                                                     let backend_kind_str = input.backend_kind.to_string();
+                                                    let parser_kind = core_api::ParserKind::from_stream_format(
+                                                        &input.stream_format,
+                                                        input.events_out_tx.clone(),
+                                                        &input.run_id,
+                                                    );
+                                                    let sink_kind = core_api::SinkKind::from_channels(None, Some(runner_tx));
                                                     core_api::run_session(RunSessionArgs {
                                                         session: input.session,
                                                         control: &input.control,
                                                         policy: input.policy,
                                                         capture_bytes: input.capture_bytes,
                                                         events_out: input.events_out_tx,
-                                                        event_tx: Some(runner_tx),
                                                         run_id: &input.run_id,
                                                         backend_kind: &backend_kind_str,
-                                                        stream_format: &input.stream_format,
+                                                        parser_kind,
+                                                        sink_kind,
                                                         abort_rx: Some(abort_rx),
                                                         stdin_payload: input.stdin_payload.clone(),
                                                     })
@@ -276,58 +278,27 @@ pub async fn run_tui_flow(
 }
 
 async fn build_plan_request(
-    query_services: &core_api::Services,
-    args: &Args,
     run_args: Option<&RunArgs>,
     stream_format: &str,
     project_id: &str,
-    user_query: &str,
 ) -> PlanRequest {
     let mode = match run_args {
         Some(ra) => {
             let backend_kind = ra.backend_kind.map(Into::into);
-
-            if ra.backend == "codex" && ra.model_provider.is_some() {
-                let task_grade_result = infer_task_level(
-                    user_query,
-                    ra.model.as_deref().unwrap_or(""),
-                    ra.model_provider.as_deref().unwrap_or(""),
-                    query_services,
-                )
-                .await;
-                tracing::info!(
-                    " Inferred task level: {}, reason: {}, recommended model: {}, confidence: {}",
-                    task_grade_result.task_level,
-                    task_grade_result.reason,
-                    task_grade_result.recommended_model,
-                    task_grade_result.confidence,
-                );
-                PlanMode::Backend {
-                    backend_spec: ra.backend.clone(),
-                    backend_kind,
-                    env_file: ra.env_file.clone(),
-                    env: ra.env.clone(),
-                    model: task_grade_result.recommended_model.clone().into(),
-                    model_provider: task_grade_result.recommended_model_provider.clone(),
-                    project_id: Some(project_id.to_string()),
-                    task_level: Some(task_grade_result.task_level.to_string()),
-                }
-            } else {
-                PlanMode::Backend {
-                    backend_spec: ra.backend.clone(),
-                    backend_kind,
-                    env_file: ra.env_file.clone(),
-                    env: ra.env.clone(),
-                    model: ra.model.clone().unwrap_or_default().into(),
-                    model_provider: ra.model_provider.clone(),
-                    project_id: Some(project_id.to_string()),
-                    task_level: None,
-                }
+            PlanMode::Backend {
+                backend_spec: ra.backend.clone(),
+                backend_kind,
+                env_file: ra.env_file.clone(),
+                env: ra.env.clone(),
+                model: ra.model.clone().unwrap_or_default().into(),
+                model_provider: ra.model_provider.clone(),
+                project_id: Some(project_id.to_string()),
+                task_level: None,
             }
         }
         None => PlanMode::Legacy {
-            cmd: args.codecli_bin.clone(),
-            args: args.codecli_args.clone(),
+            cmd: "".to_string(),
+            args: vec![],
         },
     };
 

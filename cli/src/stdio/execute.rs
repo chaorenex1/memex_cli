@@ -1,12 +1,13 @@
 use memex_core::api as core_api;
 use memex_plugins::factory;
 use memex_plugins::plan::{build_runner_spec, PlanMode, PlanRequest};
+use tokio::sync::mpsc;
 
 pub async fn execute_stdio_tasks(
-    mut tasks: Vec<core_api::StdioTask>,
+    tasks: &Vec<core_api::StdioTask>,
     ctx: &core_api::AppContext,
-    stdio_opts: core_api::StdioRunOpts,
-    resume_context: Option<String>,
+    stdio_opts: &core_api::StdioRunOpts,
+    http_sse_tx: Option<mpsc::UnboundedSender<Vec<u8>>>,
 ) -> Result<core_api::ExecutionResult, core_api::ExecutorError> {
     core_api::configure_event_buffer(
         ctx.cfg().stdio.enable_event_buffering,
@@ -14,13 +15,8 @@ pub async fn execute_stdio_tasks(
         ctx.cfg().stdio.event_flush_interval_ms,
     );
 
-    let exec_opts = core_api::ExecutionOpts::from_stdio_config(&stdio_opts, &ctx.cfg().stdio);
-
-    if let Some(ctx_str) = &resume_context {
-        if !ctx_str.is_empty() && !tasks.is_empty() {
-            tasks[0].content = format!("{}{}", ctx_str, tasks[0].content);
-        }
-    }
+    let mut exec_opts = core_api::ExecutionOpts::from_stdio_config(stdio_opts, &ctx.cfg().stdio);
+    exec_opts.http_sse_tx = http_sse_tx;
 
     let cfg_for_planner = ctx.cfg().clone();
     let planner = move |task: &core_api::StdioTask| -> Result<
@@ -31,20 +27,20 @@ pub async fn execute_stdio_tasks(
         let plan_req = PlanRequest {
             mode: PlanMode::Backend {
                 backend_spec: task.backend.clone(),
-                backend_kind: None,
-                env_file: None,
-                env: vec![],
+                backend_kind: task.backend_kind.as_ref().map(|k| *k),
+                env_file: task.env_file.clone(),
+                env: task.env.clone().unwrap_or_default(),
                 model: task.model.clone(),
                 model_provider: task.model_provider.clone(),
                 project_id: Some(task.workdir.clone()),
-                task_level: None,
+                task_level: task.task_level.clone(),
             },
-            resume_id: None,
+            resume_id: task.resume_run_id.clone(),
             stream_format: task.stream_format.clone(),
         };
-        let (runner_spec, start_data) = build_runner_spec(&mut cfg, plan_req)
+        let (runner_spec,) = build_runner_spec(&mut cfg, plan_req)
             .map_err(|e| core_api::StdioError::BackendError(e.to_string()))?;
-        Ok((runner_spec, start_data))
+        Ok((runner_spec, None))
     };
 
     let processors = factory::build_task_processors(&ctx.cfg().executor);
