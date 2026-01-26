@@ -10,6 +10,7 @@ repository = "https://github.com/chaorenex/memex-cli"
 [dependencies]
 memex-core = { workspace = true}
 tokio = { workspace = true}
+serde = { workspace = true }
 serde_json = { workspace = true}
 anyhow = { workspace = true}
 async-trait = { workspace = true}
@@ -22,9 +23,54 @@ glob = { workspace = true}
 lru = { workspace = true}
 memmap2 = { workspace = true}
 lazy_static = { workspace = true}
+uuid = { workspace = true }
+
+# Local memory storage dependencies (from workspace)
+lancedb = { workspace = true }
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+arrow-buffer = { workspace = true }
+shellexpand = { workspace = true }
+stream = { workspace = true }
+
+# Local embedding (CPU/GPU) - optional features for different backends
+candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
+candle-examples = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
+hf-hub = { workspace = true, optional = true }
+
+[features]
+default = []
+local-embedding-cpu = [
+    "candle-core",
+    "candle-nn",
+    "candle-transformers",
+    "candle-examples",
+    "tokenizers",
+    "hf-hub",
+]
+local-embedding-cuda = [
+    "local-embedding-cpu",
+    "candle-core/cuda",
+    "candle-nn/cuda",
+    "candle-transformers/cuda",
+]
+local-embedding-metal = [
+    "local-embedding-cpu",
+    "candle-core/metal",
+    "candle-nn/metal",
+    "candle-transformers/metal",
+]
+local-embedding = ["local-embedding-cpu"]  # Default to CPU
+
+[build-dependencies]
+which = { workspace = true }
 
 [dev-dependencies]
-mockito = { workspace = true}
+mockito = { workspace = true }
 
 [lints]
 workspace = true
