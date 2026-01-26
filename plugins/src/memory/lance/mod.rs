@@ -4,13 +4,11 @@
 //! with support for vector search and optional remote synchronization.
 
 pub mod embedding;
-pub mod local_embedding;
 pub mod models;
 pub mod schema;
 pub mod store;
 
 pub use embedding::{EmbeddingService, OllamaEmbeddingService, OpenAIEmbeddingService};
-pub use local_embedding::{LocalEmbeddingConfig, LocalEmbeddingService};
 pub use models::{
     HitRecord, QAItem, SignalStrength, SyncOperation, SyncStatus, ValidationLevel,
     ValidationRecord, ValidationResult,

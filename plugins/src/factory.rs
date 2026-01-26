@@ -58,14 +58,9 @@ pub async fn build_memory(
                     }
                 }
                 core_api::EmbeddingProvider::Local => {
-                    let local = local_cfg.embedding.local.as_ref().ok_or_else(|| {
-                        anyhow::anyhow!("Local configuration is required for provider=local")
-                    })?;
-                    EmbeddingConfig::Local {
-                        model: local.model.clone(),
-                        device: local.device.clone(),
-                        dimension: local.dimension,
-                    }
+                    return Err(anyhow::anyhow!(
+                        "Local embedding provider is not supported. Please use Ollama or OpenAI."
+                    ))
                 }
             };
 
@@ -106,14 +101,9 @@ pub async fn build_memory(
                     }
                 }
                 core_api::EmbeddingProvider::Local => {
-                    let local = hybrid_cfg.local.embedding.local.as_ref().ok_or_else(|| {
-                        anyhow::anyhow!("Local configuration is required for provider=local")
-                    })?;
-                    EmbeddingConfig::Local {
-                        model: local.model.clone(),
-                        device: local.device.clone(),
-                        dimension: local.dimension,
-                    }
+                    return Err(anyhow::anyhow!(
+                        "Local embedding provider is not supported. Please use Ollama or OpenAI."
+                    ))
                 }
             };
 

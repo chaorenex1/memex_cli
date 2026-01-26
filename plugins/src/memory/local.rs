@@ -14,9 +14,8 @@ use memex_core::api::{
 };
 
 use super::lance::{
-    EmbeddingService, HitRecord, LanceStore, LocalEmbeddingConfig, LocalEmbeddingService,
-    OllamaEmbeddingService, OpenAIEmbeddingService, QAItem, SignalStrength, SyncStatus,
-    ValidationRecord, ValidationResult,
+    EmbeddingService, HitRecord, LanceStore, OllamaEmbeddingService, OpenAIEmbeddingService,
+    QAItem, SignalStrength, SyncStatus, ValidationRecord, ValidationResult,
 };
 
 /// Configuration for the local memory plugin.
@@ -41,11 +40,6 @@ pub enum EmbeddingConfig {
         api_key: String,
         model: String,
     },
-    Local {
-        model: String,
-        device: String,
-        dimension: usize,
-    },
 }
 
 /// Local memory plugin using LanceDB.
@@ -69,14 +63,6 @@ impl LocalMemoryPlugin {
                 api_key,
                 model,
             } => Arc::new(OpenAIEmbeddingService::new(base_url, api_key, model)),
-            EmbeddingConfig::Local {
-                model,
-                device,
-                dimension,
-            } => {
-                let local_config = LocalEmbeddingConfig::new(model, device, dimension);
-                Arc::new(LocalEmbeddingService::new(local_config))
-            }
         };
 
         let store = LanceStore::new(&config.db_path, embedding)
