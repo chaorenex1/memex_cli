@@ -16,6 +16,7 @@ from typing import Dict, Any, Optional
 from transcript_parser import parse_transcript, ParsedTranscript
 from http_client import HTTPClient
 from project_utils import get_project_id_from_cwd
+from session_state import load_session_state
 
 
 def log_debug(message: str):
@@ -34,7 +35,9 @@ def log_debug(message: str):
 def evaluate_session_with_gatekeeper(
     client: HTTPClient,
     parsed: ParsedTranscript,
-    project_id: str
+    project_id: str,
+    transcript_path: str,
+    state: Optional[Dict[str, Any]] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Call Rust evaluate-session API with parsed transcript data
@@ -48,28 +51,40 @@ def evaluate_session_with_gatekeeper(
         API response dict or None if failed
     """
     try:
-        # Convert ParsedTranscript to API request format
+        state = state or {}
+
+        # Prefer merged_query/matches from memory-inject hook (search_handler output)
+        merged_query = state.get("merged_query")
+        if not isinstance(merged_query, str) or not merged_query.strip():
+            merged_query = parsed.user_query
+
+        matches = state.get("matches", [])
+        if not isinstance(matches, list):
+            matches = []
+
+        shown_qa_ids = state.get("shown_qa_ids")
+        if not isinstance(shown_qa_ids, list) or not shown_qa_ids:
+            shown_qa_ids = parsed.shown_qa_ids
+
+        # Convert to Rust evaluate-session request format (transcript_path-based)
         request_data = {
             "project_id": project_id,
-            "user_query": parsed.user_query,
-            "tool_events": [
-                {
-                    "tool": te.tool,
-                    "args": te.args,
-                    "output": te.output,
-                    "code": te.code
-                }
-                for te in parsed.tool_events
-            ],
+            "session_id": parsed.session_id,
+            "user_query": merged_query,
+            "matches": matches,
+            "transcript_path": transcript_path,
             "stdout": parsed.stdout,
             "stderr": parsed.stderr,
-            "shown_qa_ids": parsed.shown_qa_ids,
+            "shown_qa_ids": shown_qa_ids,
             "used_qa_ids": parsed.used_qa_ids,
             "exit_code": parsed.exit_code,
             "duration_ms": parsed.duration_ms
         }
 
-        log_debug(f"Calling evaluate-session API with {len(parsed.tool_events)} tool events")
+        log_debug(
+            "Calling evaluate-session API "
+            f"(session_id={parsed.session_id}, matches={len(matches)}, shown_qa_ids={len(shown_qa_ids)})"
+        )
 
         # Call the new evaluate-session endpoint
         response = client.request(
@@ -83,10 +98,10 @@ def evaluate_session_with_gatekeeper(
             return None
 
         log_debug(
-            f"Gatekeeper decision: {response.get('decision_summary', 'N/A')}\n"
-            f"  - Candidates recorded: {response.get('candidates_recorded', 0)}\n"
-            f"  - Hits recorded: {response.get('hits_recorded', 0)}\n"
-            f"  - Validations recorded: {response.get('validations_recorded', 0)}"
+            f"Evaluate-session scheduled: {response.get('decision_summary', 'N/A')}\n"
+            f"  - Candidates recorded (immediate): {response.get('candidates_recorded', 0)}\n"
+            f"  - Hits recorded (immediate): {response.get('hits_recorded', 0)}\n"
+            f"  - Validations recorded (immediate): {response.get('validations_recorded', 0)}"
         )
 
         return response
@@ -116,6 +131,12 @@ def main():
         project_id = get_project_id_from_cwd(cwd)
         log_debug(f"Project ID: {project_id}")
 
+        # Load shared state from memory-inject (search results)
+        try:
+            session_state = load_session_state(session_id)
+        except Exception:
+            session_state = {}
+
         # Parse transcript
         log_debug("Parsing transcript...")
         parsed = parse_transcript(transcript_path, session_id)
@@ -130,20 +151,26 @@ def main():
         # Create HTTP client
         client = HTTPClient(session_id)
 
-        # Call Rust evaluate-session API (includes gatekeeper evaluation + memory recording)
-        result = evaluate_session_with_gatekeeper(client, parsed, project_id)
+        # Call Rust evaluate-session API (now scheduled in background on server)
+        result = evaluate_session_with_gatekeeper(
+            client,
+            parsed,
+            project_id,
+            transcript_path=transcript_path,
+            state=session_state
+        )
 
         if result:
-            # Success - gatekeeper has evaluated and recorded everything
+            # Success - server accepted and scheduled evaluation
             output = {
                 "success": True,
-                "message": "Session evaluated successfully",
+                "message": "Session evaluation scheduled",
                 "gatekeeper_decision": result.get("decision_summary"),
                 "candidates_recorded": result.get("candidates_recorded", 0),
                 "hits_recorded": result.get("hits_recorded", 0),
                 "validations_recorded": result.get("validations_recorded", 0)
             }
-            log_debug("✅ Session evaluation completed successfully")
+            log_debug("✅ Session evaluation scheduled successfully")
         else:
             # Fallback: just log that we tried
             output = {

@@ -208,6 +208,16 @@ def main():
         else:
             print(f"[OK] {install_dir} already in PATH")
     
+    # npm install -g memex-cli (optional)
+    print("\n[INFO] Installing memex-cli via npm")
+    try:
+        import subprocess
+        subprocess.run(["npm", "install", "-g", "memex-cli"], check=True)
+        print("[OK] memex-cli installed via npm")
+    except Exception as e:
+        print(f"[WARN] npm install failed: {e}")
+        print("[INFO] Continuing without npm installation...")
+    
     print(f"\n=== Installation Complete ===\n")
     print(f"Run: {NAME} --help\n")
     

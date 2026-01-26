@@ -13,8 +13,8 @@ use super::abort;
 use super::control;
 use super::io_pump;
 use super::output::{
-    maybe_apply_policy, JsonlParser, OutputEvent, OutputSink, StdioSink, StreamParser, TextParser,
-    TuiSink,
+    maybe_apply_policy, HttpSseSink, JsonlParser, OutputEvent, OutputSink, StdioSink, StreamParser,
+    TextParser, TuiSink,
 };
 use super::policy::{PolicyEngine, PolicyOutcome};
 use super::traits::{PolicyPlugin, RunnerSession};
@@ -50,10 +50,10 @@ pub struct RunSessionRuntimeInput<'a> {
     pub policy: Option<Arc<dyn PolicyPlugin>>,
     pub capture_bytes: usize,
     pub events_out: Option<EventsOutTx>,
-    pub event_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,
+    pub sink_kind: SinkKind,
     pub run_id: &'a str,
     pub backend_kind: &'a str,
-    pub stream_format: &'a str,
+    pub parser_kind: ParserKind,
     pub abort_rx: Option<mpsc::Receiver<String>>,
     pub stdin_payload: Option<String>,
 }
@@ -66,23 +66,14 @@ pub async fn run_session_runtime(
         control_cfg,
         policy,
         capture_bytes,
-        events_out,
-        event_tx: tui_tx,
+        events_out: _events_out,
+        mut sink_kind,
         run_id,
         backend_kind,
-        stream_format,
+        mut parser_kind,
         mut abort_rx,
         stdin_payload,
     } = input;
-    let _span = tracing::info_span!(
-        "core.run_session",
-        run_id = %run_id,
-        capture_bytes = capture_bytes,
-        stream_format = %stream_format,
-        backend_kind = %backend_kind,
-        fail_mode = %control_cfg.fail_mode,
-    );
-    let _enter = _span.enter();
 
     let stdout = session
         .stdout()
@@ -106,15 +97,6 @@ pub async fn run_session_runtime(
 
     let started_at = Instant::now();
     let flow_audit = flow_audit_enabled();
-    if flow_audit {
-        tracing::debug!(
-            target: "memex.flow",
-            stage = "runtime.start",
-            run_id = %run_id,
-            stream_format = %stream_format,
-            backend_kind = %backend_kind
-        );
-    }
 
     let (line_tx, mut line_rx) =
         mpsc::channel::<io_pump::LineTap>(control_cfg.line_tap_channel_capacity);
@@ -144,18 +126,6 @@ pub async fn run_session_runtime(
 
     let decision_timeout = Duration::from_millis(control_cfg.decision_timeout_ms);
     let mut tick = tokio::time::interval(Duration::from_millis(control_cfg.tick_interval_ms));
-
-    let mut parser_kind = if stream_format == "jsonl" {
-        ParserKind::Jsonl(JsonlParser::new(events_out.clone(), run_id))
-    } else {
-        ParserKind::Text(TextParser::new(events_out.clone(), run_id))
-    };
-
-    let mut sink_kind = if let Some(tx) = tui_tx.clone() {
-        SinkKind::Tui(TuiSink::new(tx))
-    } else {
-        SinkKind::Stdio(StdioSink::new())
-    };
 
     let mut policy_engine = PolicyEngine::new(fail_closed, decision_timeout);
 
@@ -216,13 +186,22 @@ pub async fn run_session_runtime(
                                 preview = %audit_preview(&tap.line)
                             );
                         }
-                        // Child stderr always bypasses parsing and is written directly to the parent stderr.
-                        // The parser only ever handles child stdout.
+                        // Child stderr normally bypasses parsing and is written directly to the parent stderr.
+                        // For HTTP SSE streaming, forward stderr to the SSE sink instead.
                         if matches!(tap.stream, io_pump::LineStream::Stderr) {
-                            if flow_audit {
-                                tracing::debug!(target: "memex.flow", stage = "runtime.stderr_passthrough");
+                            if matches!(sink_kind, SinkKind::HttpSse(_)) {
+                                sink_kind
+                                    .emit(OutputEvent::RawLine {
+                                        stream: tap.stream,
+                                        text: tap.line,
+                                    })
+                                    .await;
+                            } else {
+                                if flow_audit {
+                                    tracing::debug!(target: "memex.flow", stage = "runtime.stderr_passthrough");
+                                }
+                                write_parent_stderr_line(&tap.line).await;
                             }
-                            write_parent_stderr_line(&tap.line).await;
                             continue;
                         }
 
@@ -347,10 +326,8 @@ pub async fn run_session_runtime(
         )
         .await;
         let duration_ms = started_at.elapsed().as_millis() as u64;
-        if let Some(tx) = &tui_tx {
-            let _ = tx.send(RunnerEvent::Error(reason.clone()));
-            let _ = tx.send(RunnerEvent::RunComplete { exit_code });
-        }
+        sink_kind.send_error(reason.clone());
+        sink_kind.send_run_complete(exit_code);
         return Ok(RunnerResult {
             run_id: effective_run_id.to_string(),
             exit_code,
@@ -381,9 +358,7 @@ pub async fn run_session_runtime(
 
     let duration_ms = started_at.elapsed().as_millis() as u64;
 
-    if let Some(tx) = &tui_tx {
-        let _ = tx.send(RunnerEvent::RunComplete { exit_code });
-    }
+    sink_kind.send_run_complete(exit_code);
 
     if flow_audit {
         tracing::debug!(
@@ -406,12 +381,24 @@ pub async fn run_session_runtime(
     })
 }
 
-enum ParserKind {
+pub enum ParserKind {
     Text(TextParser),
     Jsonl(JsonlParser),
 }
 
 impl ParserKind {
+    pub fn from_stream_format(
+        stream_format: &str,
+        events_out: Option<EventsOutTx>,
+        run_id: &str,
+    ) -> Self {
+        if stream_format == "jsonl" {
+            Self::Jsonl(JsonlParser::new(events_out, run_id))
+        } else {
+            Self::Text(TextParser::new(events_out, run_id))
+        }
+    }
+
     async fn parse(
         &mut self,
         tap: &io_pump::LineTap,
@@ -444,16 +431,43 @@ impl ParserKind {
     }
 }
 
-enum SinkKind {
+pub enum SinkKind {
     Tui(TuiSink),
     Stdio(StdioSink),
+    HttpSse(HttpSseSink),
 }
 
 impl SinkKind {
+    pub fn from_channels(
+        http_sse_tx: Option<mpsc::UnboundedSender<Vec<u8>>>,
+        tui_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,
+    ) -> Self {
+        if let Some(tx) = http_sse_tx {
+            SinkKind::HttpSse(HttpSseSink::new(tx))
+        } else if let Some(tx) = tui_tx {
+            SinkKind::Tui(TuiSink::new(tx))
+        } else {
+            SinkKind::Stdio(StdioSink::new())
+        }
+    }
+
     async fn emit(&mut self, ev: OutputEvent) {
         match self {
             SinkKind::Tui(s) => s.emit(ev).await,
             SinkKind::Stdio(s) => s.emit(ev).await,
+            SinkKind::HttpSse(s) => s.emit(ev).await,
+        }
+    }
+
+    fn send_error(&self, msg: String) {
+        if let SinkKind::Tui(s) = self {
+            s.send_error(msg);
+        }
+    }
+
+    fn send_run_complete(&self, exit_code: i32) {
+        if let SinkKind::Tui(s) = self {
+            s.send_run_complete(exit_code);
         }
     }
 }

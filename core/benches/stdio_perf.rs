@@ -125,6 +125,12 @@ fn bench_task_creation(c: &mut Criterion) {
                 files_mode: FilesMode::Auto,
                 files_encoding: FilesEncoding::Auto,
                 content: "测试内容".to_string(),
+                backend_kind: None,
+                env_file: None,
+                env: None,
+                task_level: None,
+                resume_run_id: None,
+                resume_context: None,
             })
         })
     });
@@ -145,6 +151,12 @@ fn bench_task_creation(c: &mut Criterion) {
                 files_mode: FilesMode::Embed,
                 files_encoding: FilesEncoding::Utf8,
                 content: "测试内容".repeat(100),
+                backend_kind: None,
+                env_file: None,
+                env: None,
+                task_level: None,
+                resume_run_id: None,
+                resume_context: None,
             })
         })
     });

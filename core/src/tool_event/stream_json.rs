@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
+use std::path::Path;
 use std::time::Instant;
 
 use chrono::Local;
@@ -636,5 +639,38 @@ impl StreamJsonToolEventParser {
 
         let v: Value = serde_json::from_str(s).ok()?;
         self.parse_value(&v)
+    }
+
+    /// Parse a transcript file (json-per-line) into a list of ToolEvent.
+    ///
+    /// This uses the same best-effort behavior as `parse_line`:
+    /// - Ignores non-JSON lines.
+    /// - Ignores lines that fail schema mapping.
+    ///
+    /// Returns I/O errors if the file cannot be read.
+    pub fn parse_transcript_path<P: AsRef<Path>>(
+        &mut self,
+        transcript_path: P,
+    ) -> io::Result<Vec<ToolEvent>> {
+        let file = File::open(transcript_path)?;
+        let reader = BufReader::new(file);
+
+        let mut events = Vec::new();
+        for line in reader.lines() {
+            let line = line?;
+            if let Some(ev) = self.parse_line(&line) {
+                events.push(ev);
+            }
+        }
+
+        Ok(events)
+    }
+
+    /// Convenience helper: create a fresh parser and parse a transcript file.
+    pub fn parse_transcript_path_file<P: AsRef<Path>>(
+        transcript_path: P,
+    ) -> io::Result<Vec<ToolEvent>> {
+        let mut parser = Self::new();
+        parser.parse_transcript_path(transcript_path)
     }
 }

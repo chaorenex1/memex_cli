@@ -31,7 +31,7 @@ pub struct PlanRequest {
 pub fn build_runner_spec(
     cfg: &mut core_api::AppConfig,
     req: PlanRequest,
-) -> Result<(core_api::RunnerSpec, Option<serde_json::Value>), core_api::RunnerError> {
+) -> Result<(core_api::RunnerSpec,), core_api::RunnerError> {
     // 初始化 base_envs 时继承当前进程的环境变量（特别是 PATH）
     let mut base_envs: HashMap<String, String> = std::env::vars().collect();
 
@@ -76,22 +76,17 @@ pub fn build_runner_spec(
                 Some(kind) => factory::build_backend_with_kind(&kind.to_string(), &backend_spec),
                 None => factory::build_backend(&backend_spec),
             };
-
-            let start_data = task_level.map(|lv| serde_json::json!({ "task_level": lv }));
-
-            Ok((
-                core_api::RunnerSpec::Backend {
-                    strategy: backend,
-                    backend_spec,
-                    base_envs,
-                    resume_id: req.resume_id,
-                    model,
-                    stream_format: req.stream_format,
-                    model_provider,
-                    project_id,
-                },
-                start_data,
-            ))
+            Ok((core_api::RunnerSpec::Backend {
+                strategy: backend,
+                backend_spec,
+                base_envs,
+                resume_id: req.resume_id,
+                model,
+                stream_format: req.stream_format,
+                model_provider,
+                project_id,
+                task_level,
+            },))
         }
         PlanMode::Legacy { cmd, args } => {
             let runner: Box<dyn core_api::RunnerPlugin> = factory::build_runner(cfg);
@@ -102,13 +97,10 @@ pub fn build_runner_spec(
                 cwd: None,
                 stdin_payload: None,
             };
-            Ok((
-                core_api::RunnerSpec::Passthrough {
-                    runner,
-                    session_args,
-                },
-                None,
-            ))
+            Ok((core_api::RunnerSpec::Passthrough {
+                runner,
+                session_args,
+            },))
         }
     }
 }

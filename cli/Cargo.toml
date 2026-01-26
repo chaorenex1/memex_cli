@@ -35,20 +35,30 @@ tracing-appender = { workspace = true }
 # Time & UUID
 chrono = { workspace = true }
 uuid = { workspace = true }
+shellexpand = { workspace = true }
 
 # TUI (Terminal UI)
 ratatui = { workspace = true }
 crossterm = { workspace = true }
 atty = { workspace = true }
 
+# HTTP client (for daemon)
+reqwest = { workspace = true }
+futures = { workspace = true }
+
 # HTTP server
 axum = { workspace = true }
 tower = { workspace = true }
-tower-http = { workspace = true, features = ["fs"] }
+tower-http = { workspace = true, features = ["fs", "cors", "trace", "timeout"] }
+bytes = { workspace = true }
+async-stream = { workspace = true }
 
 # System utilities
 arboard = { workspace = true }
 dirs = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
 
 [build-dependencies]
 # Windows resource compiler for embedding icon and version info

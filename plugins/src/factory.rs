@@ -13,12 +13,17 @@ use crate::executor::{
     PromptEnhancerPlugin, TextRendererPlugin,
 };
 use crate::gatekeeper::StandardGatekeeperPlugin;
+use crate::memory::hybrid::{HybridMemoryConfig, HybridMemoryPlugin};
+use crate::memory::local::{EmbeddingConfig, LocalMemoryConfig, LocalMemoryPlugin};
 use crate::memory::service::MemoryServicePlugin;
+use crate::memory::sync::SyncConfig;
 use crate::policy::config_rules::ConfigPolicyPlugin;
 use crate::runner::codecli::CodeCliRunnerPlugin;
 use crate::runner::replay::ReplayRunnerPlugin;
 
-pub fn build_memory(cfg: &core_api::AppConfig) -> Result<Option<Arc<dyn core_api::MemoryPlugin>>> {
+pub async fn build_memory(
+    cfg: &core_api::AppConfig,
+) -> Result<Option<Arc<dyn core_api::MemoryPlugin>>> {
     if !cfg.memory.enabled {
         return Ok(None);
     }
@@ -29,6 +34,122 @@ pub fn build_memory(cfg: &core_api::AppConfig) -> Result<Option<Arc<dyn core_api
             svc_cfg.api_key.clone(),
             svc_cfg.timeout_ms,
         )?))),
+        core_api::MemoryProvider::Local(local_cfg) => {
+            // Build embedding config
+            let embedding = match &local_cfg.embedding.provider {
+                core_api::EmbeddingProvider::Ollama => {
+                    let ollama = local_cfg.embedding.ollama.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("Ollama configuration is required for provider=ollama")
+                    })?;
+                    EmbeddingConfig::Ollama {
+                        base_url: ollama.base_url.clone(),
+                        model: ollama.model.clone(),
+                        dimension: ollama.dimension,
+                    }
+                }
+                core_api::EmbeddingProvider::OpenAI => {
+                    let openai = local_cfg.embedding.openai.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("OpenAI configuration is required for provider=openai")
+                    })?;
+                    EmbeddingConfig::OpenAI {
+                        base_url: openai.base_url.clone(),
+                        api_key: openai.api_key.clone(),
+                        model: openai.model.clone(),
+                    }
+                }
+                core_api::EmbeddingProvider::Local => {
+                    let local = local_cfg.embedding.local.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("Local configuration is required for provider=local")
+                    })?;
+                    EmbeddingConfig::Local {
+                        model: local.model.clone(),
+                        device: local.device.clone(),
+                        dimension: local.dimension,
+                    }
+                }
+            };
+
+            // Expand home directory in db_path
+            let db_path = shellexpand::tilde(&local_cfg.db_path).to_string();
+
+            let plugin = LocalMemoryPlugin::new(LocalMemoryConfig {
+                db_path,
+                embedding,
+                search_limit: local_cfg.search_limit,
+                min_score: local_cfg.min_score,
+            })
+            .await?;
+
+            Ok(Some(Arc::new(plugin)))
+        }
+        core_api::MemoryProvider::Hybrid(hybrid_cfg) => {
+            // Build embedding config from local config
+            let embedding = match &hybrid_cfg.local.embedding.provider {
+                core_api::EmbeddingProvider::Ollama => {
+                    let ollama = hybrid_cfg.local.embedding.ollama.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("Ollama configuration is required for provider=ollama")
+                    })?;
+                    EmbeddingConfig::Ollama {
+                        base_url: ollama.base_url.clone(),
+                        model: ollama.model.clone(),
+                        dimension: ollama.dimension,
+                    }
+                }
+                core_api::EmbeddingProvider::OpenAI => {
+                    let openai = hybrid_cfg.local.embedding.openai.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("OpenAI configuration is required for provider=openai")
+                    })?;
+                    EmbeddingConfig::OpenAI {
+                        base_url: openai.base_url.clone(),
+                        api_key: openai.api_key.clone(),
+                        model: openai.model.clone(),
+                    }
+                }
+                core_api::EmbeddingProvider::Local => {
+                    let local = hybrid_cfg.local.embedding.local.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("Local configuration is required for provider=local")
+                    })?;
+                    EmbeddingConfig::Local {
+                        model: local.model.clone(),
+                        device: local.device.clone(),
+                        dimension: local.dimension,
+                    }
+                }
+            };
+
+            // Expand home directory
+            let db_path = shellexpand::tilde(&hybrid_cfg.local.db_path).to_string();
+
+            // Build sync config - use core_api types directly
+            let sync_config = SyncConfig {
+                enabled: hybrid_cfg.local.sync.enabled,
+                interval: std::time::Duration::from_secs(hybrid_cfg.local.sync.interval_secs),
+                batch_size: hybrid_cfg.local.sync.batch_size,
+                max_retries: hybrid_cfg.local.sync.max_retries,
+                retry_delay_ms: 1000,
+                conflict_resolution: hybrid_cfg.local.sync.conflict_resolution,
+            };
+
+            let local_config = LocalMemoryConfig {
+                db_path,
+                embedding,
+                search_limit: hybrid_cfg.local.search_limit,
+                min_score: hybrid_cfg.local.min_score,
+            };
+
+            let hybrid_config = HybridMemoryConfig {
+                local: local_config,
+                remote_base_url: hybrid_cfg.remote.base_url.clone(),
+                remote_api_key: hybrid_cfg.remote.api_key.clone(),
+                remote_timeout_ms: hybrid_cfg.remote.timeout_ms,
+                sync_strategy: hybrid_cfg.sync_strategy,
+                sync: sync_config,
+            };
+
+            let plugin = HybridMemoryPlugin::new(hybrid_config).await?;
+
+            Ok(Some(Arc::new(plugin)))
+        }
     }
 }
 

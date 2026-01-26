@@ -14,5 +14,6 @@ mod traits;
 pub use events::RunnerEvent;
 pub use run::run_session;
 pub use run::RunSessionArgs;
+pub use runtime::{ParserKind, SinkKind};
 pub use traits::{PolicyPlugin, RunnerPlugin, RunnerSession};
 pub use types::{PolicyAction, RunOutcome, RunnerResult, RunnerStartArgs, Signal};

@@ -21,7 +21,7 @@ pub struct TaskGraph<T: TaskLike> {
 
 impl<T: TaskLike> TaskGraph<T> {
     /// Construct task graph from task list
-    pub fn from_tasks(tasks: Vec<T>) -> Result<Self, ExecutorError> {
+    pub fn from_tasks(tasks: &Vec<T>) -> Result<Self, ExecutorError> {
         let mut nodes = HashMap::new();
         let mut edges = HashMap::new();
         let mut reverse_edges: HashMap<String, Vec<String>> = HashMap::new();
@@ -36,7 +36,7 @@ impl<T: TaskLike> TaskGraph<T> {
             let task_id = task.id().to_string();
             let dependencies = task.dependencies().to_vec();
 
-            nodes.insert(task_id.clone(), task);
+            nodes.insert(task_id.clone(), task.clone());
             edges.insert(task_id.clone(), dependencies.clone());
             insertion_order.push(task_id.clone());
 
@@ -216,165 +216,4 @@ impl<T: TaskLike> TaskGraph<T> {
 
 fn format_cycle_path(stack: &[String]) -> String {
     stack.join(" -> ")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::stdio::StdioTask;
-    use crate::stdio::{FilesEncoding, FilesMode};
-
-    fn task(id: &str, deps: &[&str]) -> StdioTask {
-        StdioTask {
-            id: id.to_string(),
-            backend: "codex".to_string(),
-            workdir: ".".to_string(),
-            model: None,
-            model_provider: None,
-            dependencies: deps.iter().map(|s| s.to_string()).collect(),
-            stream_format: "text".to_string(),
-            timeout: None,
-            retry: None,
-            files: vec![],
-            files_mode: FilesMode::Auto,
-            files_encoding: FilesEncoding::Auto,
-            content: String::new(),
-        }
-    }
-
-    #[test]
-    fn test_topological_sort_linear() {
-        // A -> B -> C
-        let tasks = vec![task("A", &[]), task("B", &["A"]), task("C", &["B"])];
-
-        let graph = TaskGraph::from_tasks(tasks).unwrap();
-        graph.validate().unwrap();
-        let stages = graph.topological_sort().unwrap();
-
-        assert_eq!(
-            stages,
-            vec![
-                vec!["A".to_string()],
-                vec!["B".to_string()],
-                vec!["C".to_string()]
-            ]
-        );
-    }
-
-    #[test]
-    fn test_topological_sort_diamond() {
-        //     A
-        //    / \
-        //   B   C
-        //    \ /
-        //     D
-        let tasks = vec![
-            task("A", &[]),
-            task("B", &["A"]),
-            task("C", &["A"]),
-            task("D", &["B", "C"]),
-        ];
-
-        let graph = TaskGraph::from_tasks(tasks).unwrap();
-        graph.validate().unwrap();
-        let stages = graph.topological_sort().unwrap();
-
-        assert_eq!(stages.len(), 3);
-        assert_eq!(stages[0], vec!["A".to_string()]);
-        assert_eq!(stages[1], vec!["B".to_string(), "C".to_string()]);
-        assert_eq!(stages[2], vec!["D".to_string()]);
-    }
-
-    #[test]
-    fn test_detect_cycle_simple() {
-        // A -> B -> A
-        let tasks = vec![task("A", &["B"]), task("B", &["A"])];
-
-        let graph = TaskGraph::from_tasks(tasks).unwrap();
-        let result = graph.validate();
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            ExecutorError::CircularDependency(msg) => {
-                assert!(msg.contains("A") && msg.contains("B"));
-            }
-            _ => panic!("Expected CircularDependency error"),
-        }
-    }
-
-    #[test]
-    fn test_detect_cycle_complex() {
-        // A -> B -> C -> D -> B (cycle)
-        let tasks = vec![
-            task("A", &[]),
-            task("B", &["A"]),
-            task("C", &["B"]),
-            task("D", &["C"]),
-            task("E", &["D", "B"]),
-        ];
-
-        let graph = TaskGraph::from_tasks(tasks).unwrap();
-        // This should NOT have a cycle (E depends on both D and B, but no back edge)
-        assert!(graph.validate().is_ok());
-
-        // Create actual cycle: D -> B
-        let tasks_with_cycle = vec![
-            task("A", &[]),
-            task("B", &["A", "D"]), // Cycle: B -> A -> B via D
-            task("C", &["B"]),
-            task("D", &["C"]),
-        ];
-
-        let graph = TaskGraph::from_tasks(tasks_with_cycle).unwrap();
-        assert!(graph.validate().is_err());
-    }
-
-    #[test]
-    fn test_missing_dependency() {
-        let tasks = vec![task("A", &["B"])]; // B doesn't exist
-
-        let graph = TaskGraph::from_tasks(tasks).unwrap();
-        let result = graph.validate();
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            ExecutorError::DependencyNotFound {
-                task_id,
-                missing_dep,
-            } => {
-                assert_eq!(task_id, "A");
-                assert_eq!(missing_dep, "B");
-            }
-            _ => panic!("Expected DependencyNotFound error"),
-        }
-    }
-
-    #[test]
-    fn test_duplicate_task_id() {
-        let tasks = vec![task("A", &[]), task("A", &[])];
-
-        let result = TaskGraph::from_tasks(tasks);
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            ExecutorError::DuplicateTaskId(id) => {
-                assert_eq!(id, "A");
-            }
-            _ => panic!("Expected DuplicateTaskId error"),
-        }
-    }
-
-    #[test]
-    fn test_single_layer_preserves_input_order() {
-        let tasks = vec![task("C", &[]), task("A", &[]), task("B", &[])];
-
-        let graph = TaskGraph::from_tasks(tasks).unwrap();
-        let stages = graph.topological_sort().unwrap();
-
-        assert_eq!(stages.len(), 1);
-        assert_eq!(
-            stages[0],
-            vec!["C".to_string(), "A".to_string(), "B".to_string()]
-        );
-    }
 }

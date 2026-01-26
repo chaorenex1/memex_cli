@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc;
 
 use crate::events_out::EventsOutTx;
 use crate::tool_event::{
@@ -346,6 +347,66 @@ pub trait OutputSink: Send {
     async fn emit(&mut self, ev: OutputEvent);
 }
 
+pub struct HttpSseSink {
+    tx: mpsc::UnboundedSender<Vec<u8>>,
+}
+
+impl HttpSseSink {
+    pub fn new(tx: mpsc::UnboundedSender<Vec<u8>>) -> Self {
+        Self { tx }
+    }
+
+    fn format_sse(event: &str, data: &str) -> Vec<u8> {
+        // Server-Sent Events framing:
+        // event: <name>\n
+        // data: <line>\n
+        // ...\n
+        // \n
+        let mut out = String::new();
+        out.push_str("event: ");
+        out.push_str(event);
+        out.push('\n');
+        for line in data.split('\n') {
+            out.push_str("data: ");
+            out.push_str(line);
+            out.push('\n');
+        }
+        out.push('\n');
+        out.into_bytes()
+    }
+
+    fn send(&self, event: &str, data: &str) {
+        let _ = self.tx.send(Self::format_sse(event, data));
+    }
+}
+
+#[async_trait]
+impl OutputSink for HttpSseSink {
+    async fn emit(&mut self, ev: OutputEvent) {
+        match ev {
+            OutputEvent::RawLine { stream, text } => {
+                let event = match stream {
+                    LineStream::Stdout => "stdout",
+                    LineStream::Stderr => "stderr",
+                };
+                self.send(event, &text);
+            }
+            OutputEvent::ToolEvent(tool_ev) => {
+                // Stream structured events as JSON payload.
+                let event = tool_ev.event_type.as_str();
+                let mut buf = Vec::with_capacity(1024);
+                let data = if serde_json::to_writer(&mut buf, tool_ev.as_ref()).is_ok() {
+                    // SAFETY: serde_json always produces valid UTF-8
+                    unsafe { String::from_utf8_unchecked(buf) }
+                } else {
+                    "{}".to_string()
+                };
+                self.send(event, &data);
+            }
+        }
+    }
+}
+
 pub struct TuiSink {
     tx: tokio::sync::mpsc::UnboundedSender<RunnerEvent>,
 }
@@ -353,6 +414,14 @@ pub struct TuiSink {
 impl TuiSink {
     pub fn new(tx: tokio::sync::mpsc::UnboundedSender<RunnerEvent>) -> Self {
         Self { tx }
+    }
+
+    pub fn send_error(&self, msg: String) {
+        let _ = self.tx.send(RunnerEvent::Error(msg));
+    }
+
+    pub fn send_run_complete(&self, exit_code: i32) {
+        let _ = self.tx.send(RunnerEvent::RunComplete { exit_code });
     }
 }
 

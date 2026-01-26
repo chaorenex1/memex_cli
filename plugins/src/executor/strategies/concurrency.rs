@@ -29,9 +29,12 @@ impl ConcurrencyStrategyPlugin for AdaptiveConcurrencyPlugin {
     fn calculate_concurrency(&self, context: &ConcurrencyContext) -> usize {
         let mut desired = context.base_concurrency;
 
-        if context.cpu_usage >= self.config.cpu_threshold_high {
+        // Clamp cpu_usage to valid range [0, 100] to handle anomalous system readings
+        let cpu_usage = context.cpu_usage.clamp(0.0, 100.0);
+
+        if cpu_usage >= self.config.cpu_threshold_high {
             desired = desired.saturating_div(2).max(self.config.min_concurrency);
-        } else if context.cpu_usage <= self.config.cpu_threshold_low {
+        } else if cpu_usage <= self.config.cpu_threshold_low {
             desired = desired.saturating_mul(2).min(self.config.max_concurrency);
         }
 

@@ -1,4 +1,4 @@
-﻿use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 /**
  {
@@ -38,7 +38,7 @@ pub struct SearchMatch {
     pub metadata: Value,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InjectItem {
     pub qa_id: String,
     pub question: String,
@@ -50,7 +50,7 @@ pub struct InjectItem {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HitRef {
     pub qa_id: String,
     pub shown: bool,
@@ -59,7 +59,7 @@ pub struct HitRef {
     pub context: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatePlan {
     pub qa_id: String,
     pub result: String,
@@ -69,14 +69,18 @@ pub struct ValidatePlan {
     pub payload: Value,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatekeeperDecision {
     pub inject_list: Vec<InjectItem>,
     pub should_write_candidate: bool,
 
     pub hit_refs: Vec<HitRef>,
+
     pub validate_plans: Vec<ValidatePlan>,
 
     pub reasons: Vec<String>,
+
     pub signals: Value,
+
+    pub candidate_drafts: Vec<crate::memory::CandidateDraft>,
 }

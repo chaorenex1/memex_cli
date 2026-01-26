@@ -46,6 +46,14 @@ memmap2 = { workspace = true }
 lazy_static = { workspace = true }
 num_cpus = { workspace = true }
 
+# HTTP server
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["fs", "cors", "trace", "timeout"] }
+bytes = { workspace = true }
+async-stream = { workspace = true }
+dirs = { workspace = true }
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 tempfile = { workspace = true }

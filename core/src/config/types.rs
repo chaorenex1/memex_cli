@@ -425,6 +425,224 @@ pub struct MemoryConfig {
 pub enum MemoryProvider {
     #[serde(rename = "service")]
     Service(MemoryServiceConfig),
+    #[serde(rename = "local")]
+    Local(MemoryLocalConfig),
+    #[serde(rename = "hybrid")]
+    Hybrid(MemoryHybridConfig),
+}
+
+/// Local memory storage configuration (LanceDB)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryLocalConfig {
+    /// LanceDB database path
+    #[serde(default = "default_local_db_path")]
+    pub db_path: String,
+
+    /// Embedding service configuration
+    #[serde(default)]
+    pub embedding: EmbeddingConfig,
+
+    /// Search limit
+    #[serde(default = "default_search_limit")]
+    pub search_limit: u32,
+
+    #[serde(default = "default_min_score")]
+    pub min_score: f32,
+
+    /// Sync configuration
+    #[serde(default)]
+    pub sync: SyncConfig,
+}
+
+/// Hybrid memory configuration (local + remote sync)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryHybridConfig {
+    /// Local storage configuration
+    pub local: MemoryLocalConfig,
+
+    /// Remote service configuration
+    pub remote: MemoryServiceConfig,
+
+    /// Sync strategy
+    #[serde(default = "default_sync_strategy")]
+    pub sync_strategy: SyncStrategy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncStrategy {
+    /// Local-first, background sync
+    #[default]
+    LocalFirst,
+    /// Remote-first, local cache
+    RemoteFirst,
+}
+
+/// Embedding service configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingConfig {
+    /// Embedding provider type
+    #[serde(default = "default_embedding_provider")]
+    pub provider: EmbeddingProvider,
+
+    /// Ollama (local) configuration
+    #[serde(default)]
+    pub ollama: Option<OllamaConfig>,
+
+    /// OpenAI (remote) configuration
+    #[serde(default)]
+    pub openai: Option<OpenAIConfig>,
+
+    /// Local (CPU/GPU) configuration
+    #[serde(default)]
+    pub local: Option<LocalConfig>,
+}
+
+impl Default for EmbeddingConfig {
+    fn default() -> Self {
+        Self {
+            provider: default_embedding_provider(),
+            ollama: None,
+            openai: None,
+            local: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum EmbeddingProvider {
+    #[default]
+    Ollama,
+    OpenAI,
+    Local,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OllamaConfig {
+    #[serde(default = "default_ollama_base_url")]
+    pub base_url: String,
+    #[serde(default = "default_ollama_model")]
+    pub model: String,
+    #[serde(default = "default_ollama_dimension")]
+    pub dimension: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIConfig {
+    #[serde(default = "default_openai_base_url")]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "default_openai_model")]
+    pub model: String,
+}
+
+/// Local (CPU/GPU) embedding configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalConfig {
+    /// Model to use: "all-MiniLM-L6-v2" (default), "bge-small-en-v1.5", etc.
+    #[serde(default = "default_local_model")]
+    pub model: String,
+
+    /// Device: "cpu" (default), "cuda" (NVIDIA GPU), "metal" (Apple Silicon)
+    #[serde(default = "default_local_device")]
+    pub device: String,
+
+    /// Embedding dimension (auto-detected from model if 0)
+    #[serde(default = "default_local_dimension")]
+    pub dimension: usize,
+
+    /// Model repository (huggingface hub)
+    #[serde(default = "default_local_repo")]
+    pub repo: String,
+}
+
+fn default_local_model() -> String {
+    "all-MiniLM-L6-v2".to_string()
+}
+
+fn default_local_device() -> String {
+    "cpu".to_string()
+}
+
+fn default_local_dimension() -> usize {
+    384 // all-MiniLM-L6-v2 default
+}
+
+fn default_local_repo() -> String {
+    "sentence-transformers".to_string()
+}
+
+/// Sync configuration for local memory
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncConfig {
+    /// Enable automatic background sync
+    #[serde(default = "default_sync_enabled")]
+    pub enabled: bool,
+
+    /// Auto-sync interval in seconds
+    #[serde(default = "default_sync_interval_secs")]
+    pub interval_secs: u64,
+
+    /// Batch size for upload
+    #[serde(default = "default_sync_batch_size")]
+    pub batch_size: usize,
+
+    /// Maximum retry attempts
+    #[serde(default = "default_sync_max_retries")]
+    pub max_retries: usize,
+
+    /// Conflict resolution strategy
+    #[serde(default = "default_conflict_resolution")]
+    pub conflict_resolution: ConflictResolution,
+}
+
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_sync_enabled(),
+            interval_secs: default_sync_interval_secs(),
+            batch_size: default_sync_batch_size(),
+            max_retries: default_sync_max_retries(),
+            conflict_resolution: default_conflict_resolution(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictResolution {
+    #[default]
+    LastWriteWins,
+    LocalWins,
+    RemoteWins,
+    Manual,
+}
+
+impl std::str::FromStr for ConflictResolution {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "last_write_wins" => Ok(ConflictResolution::LastWriteWins),
+            "local_wins" => Ok(ConflictResolution::LocalWins),
+            "remote_wins" => Ok(ConflictResolution::RemoteWins),
+            "manual" => Ok(ConflictResolution::Manual),
+            _ => Err(format!("Unknown conflict resolution strategy: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for ConflictResolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConflictResolution::LastWriteWins => write!(f, "last_write_wins"),
+            ConflictResolution::LocalWins => write!(f, "local_wins"),
+            ConflictResolution::RemoteWins => write!(f, "remote_wins"),
+            ConflictResolution::Manual => write!(f, "manual"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -589,6 +807,62 @@ fn default_min_score() -> f32 {
     0.2
 }
 
+// ============= Local Memory Defaults =============
+
+fn default_local_db_path() -> String {
+    "~/.memex/db".to_string()
+}
+
+fn default_embedding_provider() -> EmbeddingProvider {
+    EmbeddingProvider::Ollama
+}
+
+fn default_ollama_base_url() -> String {
+    "http://localhost:11434".to_string()
+}
+
+fn default_ollama_model() -> String {
+    "nomic-embed-text".to_string()
+}
+
+fn default_ollama_dimension() -> usize {
+    768
+}
+
+fn default_openai_base_url() -> String {
+    "https://api.openai.com/v1".to_string()
+}
+
+fn default_openai_model() -> String {
+    "text-embedding-3-small".to_string()
+}
+
+fn default_sync_strategy() -> SyncStrategy {
+    SyncStrategy::LocalFirst
+}
+
+// ============= Sync Config Defaults =============
+
+fn default_sync_enabled() -> bool {
+    true // Auto-sync enabled by default
+}
+
+fn default_sync_interval_secs() -> u64 {
+    300 // 5 minutes
+}
+
+fn default_sync_batch_size() -> usize {
+    50
+}
+
+fn default_sync_max_retries() -> usize {
+    3
+}
+
+fn default_conflict_resolution() -> ConflictResolution {
+    ConflictResolution::LastWriteWins
+}
+
 impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
@@ -744,6 +1018,10 @@ pub struct HttpServerConfig {
 
     #[serde(default = "default_http_server_port")]
     pub port: u16,
+
+    /// 客户端模式：local | remote
+    #[serde(default = "default_client_mode")]
+    pub mode: String,
 }
 
 fn default_http_server_host() -> String {
@@ -754,11 +1032,16 @@ fn default_http_server_port() -> u16 {
     8080
 }
 
+fn default_client_mode() -> String {
+    "local".to_string()
+}
+
 impl Default for HttpServerConfig {
     fn default() -> Self {
         Self {
             host: default_http_server_host(),
             port: default_http_server_port(),
+            mode: default_client_mode(),
         }
     }
 }

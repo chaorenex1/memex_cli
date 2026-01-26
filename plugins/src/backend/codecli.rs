@@ -24,6 +24,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             model_provider,
             project_id,
             stream_format,
+            task_level: _,
         } = request;
 
         // 提取命令类型用于判断参数格式（codex/claude/gemini）

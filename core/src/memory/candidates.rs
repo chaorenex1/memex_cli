@@ -151,7 +151,10 @@ pub fn extract_candidates(
         final_answer = redact_secrets(&final_answer);
     }
 
-    if final_answer.chars().count() < cfg.min_answer_chars {
+    // Use byte length as fast path - valid UTF-8: chars() >= bytes() / 4
+    // This avoids O(n) char counting for common cases
+    let is_too_short = final_answer.len() < cfg.min_answer_chars.saturating_mul(4);
+    if is_too_short {
         tracing::debug!(
             target: "memex.qa",
             stage = "candidate.extract.skip",

@@ -141,9 +141,7 @@ class HTTPClient:
             "/api/v1/search",
             {
                 "query": query,
-                "project_id": project_id,
-                "limit": limit,
-                "min_score": min_score
+                "project_id": project_id
             }
         )
 

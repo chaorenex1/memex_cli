@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $REPO = "chaorenex1/memex-cli"
 $NAME = "memex-cli"
-$INSTALL_DIR = "$env:USERPROFILE\.memex\bin"
+$INSTALL_DIR = "$env:USERPROFILE\.local\bin"
 
 # Helper functions
 function Info-Log {

@@ -8,7 +8,7 @@ mod events_out;
 pub mod executor;
 mod gatekeeper;
 mod input;
-mod memory;
+pub mod memory;
 mod replay;
 mod runner;
 pub mod stdio;
