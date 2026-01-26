@@ -12,94 +12,83 @@ memex-core = { path = "core" }
 memex-plugins = { path = "plugins" }
 memex-cli = { path = "cli" }
 
-# Core async runtime
+# Core async runtime (minimal features)
 tokio = { version = "^1.37", features = ["process", "io-util", "macros", "signal", "rt-multi-thread", "io-std", "fs", "sync", "time"] }
-futures = "^0.3"
+futures = { version = "^0.3"}
 async-trait = "^0.1"
 
 # CLI
-clap = { version = "^4.5", features = ["derive"] }
+clap = { version = "^4.5", features = ["std", "derive"] }
 
 # Serialization
 serde = { version = "^1.0", features = ["derive"] }
-serde_json = "^1.0"
-toml = "0.8"
+serde_json = { version = "^1.0", features = ["std"] }
+toml = { version = "0.8" }
+
+ratatui = { version = "^0.28"}
+crossterm = { version = "^0.28"}
+atty = { version = "^0.2"}
 
 # Error handling
-thiserror = "^1.0"
-anyhow = "^1.0"
+thiserror = { version = "^1.0"}
+anyhow = { version = "^1.0" }
 
-# Logging & tracing
-tracing = { version = "^0.1", features = ["attributes"] }
-tracing-subscriber = { version = "^0.3", features = ["env-filter", "fmt"] }
-tracing-appender = "^0.2"
+# Logging & tracing (minimal features)
+tracing = { version = "^0.1", features = ["attributes", "std"] }
+tracing-subscriber = { version = "^0.3", features = ["std", "smallvec", "fmt", "env-filter"] }
+tracing-appender = { version = "^0.2" }
 
-# HTTP client
-reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
-bytes = "^1.5"
+# HTTP client (rustls instead of native-tls for smaller size)
+axum = { version = "^0.7.9", features = ["http2"] }
+tower = { version = "^0.4" }
+tower-http = { version = "^0.5", features = ["cors", "trace", "timeout","util"] }
+reqwest = { version = "^0.12", features = ["http2", "rustls-tls", "stream"] }
+bytes = { version = "^1.5", features = ["std"] }
 async-stream = "^0.3"
+
+# System directories
+dirs = { version = "5.0" }
+arboard = { version = "^3.6.1" }
+
+# Optional performance optimizations
+sysinfo = { version = "^0.30"}
+lru = { version = "^0.12" }
+memmap2 = { version = "^0.9" }
+lazy_static = { version = "^1.4" }
+num_cpus = { version = "^1.16" }
 
 # Platform-specific
 windows = { version = "0.58", features = ["Win32_System_Threading"] }
 
-# Time & UUID
-chrono = { version = "^0.4", features = ["serde"] }
-uuid = { version = "^1.8", features = ["v4"] }
-
+# Time & UUID (minimal features)
+chrono = { version = "^0.4", features = ["clock", "std"] }
+uuid = { version = "^1.8", features = ["std"] }
 # Text & regex
-regex = "^1.10"
-encoding_rs = "^0.8"
+regex = { version = "^1.10", features = ["std", "unicode"] }
+encoding_rs = { version = "^0.8" }
 
-# TUI (Terminal UI)
-ratatui = "^0.28"
-crossterm = "^0.28"
-atty = "^0.2"
-indicatif = "^0.17"  # Progress bars
+# File operations
+base64 = { version = "^0.22", features = ["std"] }
+glob = { version = "^0.3" }
+indicatif = { version = "^0.17" }
 
-# HTTP server (CLI specific)
-axum = "^0.7"
-tower = { version = "^0.4", features = ["util"] }
-tower-http = { version = "^0.5", features = ["cors", "trace", "timeout"] }
+# Optional LanceDB dependencies (for local-memory feature)
+lancedb = { version = "^0.23", default-features = false}
+arrow = { version = "^56", default-features = false, features = ["ipc"] }
+arrow-array = { version = "^56"}
+arrow-schema = { version = "^56"}
+arrow-buffer = { version = "^56"}
+shellexpand = { version = "3.0"}
+stream = { version = "^0.1"}
 
-# System utilities (CLI specific)
-arboard = "^3.4"      # Clipboard
-dirs = "^5.0"         # User directories
-
-# File operations (Core optimization)
-base64 = "^0.22"      # Base64 encoding
-glob = "^0.3"         # File pattern matching
-
-# Performance optimization (Core Level 2-3)
-sysinfo = "^0.30"     # CPU monitoring (Level 2.2 dynamic concurrency)
-lru = "^0.12"         # LRU cache (Level 3.3 file cache)
-memmap2 = "^0.9"      # Memory-mapped files (Level 3.1 large file optimization)
-lazy_static = "^1.4"  # Static variables (event buffer, file cache)
-num_cpus = "^1.16"    # CPU core detection
-
-# Local memory storage (LanceDB)
-lancedb = "^0.23"                      # Vector database for local memory
-arrow = { version = "^56", features = ["ffi"] }
-arrow-array = "^56"
-arrow-schema = "^56"
-arrow-buffer = "^56"                  # Buffer types for Arrow arrays
-shellexpand = "^3.0"                  # Home directory expansion
-stream = "^0.1"                       # Stream utilities
-
-# Local embedding (CPU/GPU inference)
-candle-core = "^0.6"                  # Core candle types
-candle-nn = "^0.6"                    # Neural network modules
-candle-transformers = "^0.6"          # Transformer models
-candle-examples = "^0.6"              # Model utilities
-tokenizers = "^0.20"                  # Tokenization
-hf-hub = "^0.3"                       # Hugging Face hub API
 # Development dependencies
-tokio-test = "^0.4"
-tempfile = "^3.6"
-mockito = "^1.3"
-pretty_assertions = "^1.3"
-criterion = { version = "^0.5", features = ["html_reports"] }
-winres = "^0.1"
-which = "^7.0"        # Build dependency for protoc detection
+tokio-test = { version = "^0.4"}
+tempfile = { version = "^3.6"}
+mockito = { version = "^1.3" }
+pretty_assertions = { version = "^1.3" }
+criterion = { version = "^0.5"}
+winres = { version = "^0.1" }
+which = { version = "^7.0"}
 
 [profile.dev]
 opt-level = 0

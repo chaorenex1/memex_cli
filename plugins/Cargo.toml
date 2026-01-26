@@ -5,37 +5,33 @@ edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
 description = "Core logic for CodeCLI powered by Memex"
-repository = "https://github.com/chaorenex/memex-cli"
+repository = "https://github.com/chaorenex1/memex-cli"
 
 [dependencies]
-memex-core = { workspace = true}
-tokio = { workspace = true}
+memex-core = { workspace = true }
+tokio = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true}
-anyhow = { workspace = true}
-async-trait = { workspace = true}
-reqwest = { workspace = true}
-chrono = { workspace = true}
-futures = { workspace = true}
-tracing = { workspace = true}
-base64 = { workspace = true}
-glob = { workspace = true}
-lru = { workspace = true}
-memmap2 = { workspace = true}
-lazy_static = { workspace = true}
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+base64 = { workspace = true }
+glob = { workspace = true }
+lazy_static = { workspace = true }
 uuid = { workspace = true }
+memmap2 = { workspace = true }
+lru = { workspace = true }
 
-# Local memory storage dependencies (from workspace)
-lancedb = { workspace = true }
-arrow = { workspace = true }
-arrow-array = { workspace = true }
-arrow-schema = { workspace = true }
-arrow-buffer = { workspace = true }
-shellexpand = { workspace = true }
-stream = { workspace = true }
-
-[features]
-default = []
+lancedb = { workspace = true, default-features = false}
+arrow = { workspace = true}
+arrow-array = { workspace = true}
+arrow-schema = { workspace = true}
+arrow-buffer = { workspace = true}
+shellexpand = { workspace = true}
+stream = { workspace = true}
 
 [build-dependencies]
 which = { workspace = true }
