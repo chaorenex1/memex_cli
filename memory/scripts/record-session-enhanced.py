@@ -120,6 +120,10 @@ def main():
 
         session_id = hook_input.get("session_id", "unknown")
         transcript_path = hook_input.get("transcript_path", "")
+        agent_transcript_path = hook_input.get("agent_transcript_path", "")
+        if agent_transcript_path:
+            log_debug(f"Agent transcript path found: {agent_transcript_path}")
+            transcript_path = agent_transcript_path  # Prefer agent transcript if available
         cwd = hook_input.get("cwd", os.getcwd())
 
         if not transcript_path or not Path(transcript_path).exists():
