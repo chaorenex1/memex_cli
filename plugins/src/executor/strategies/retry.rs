@@ -10,15 +10,46 @@ pub struct LinearRetryPlugin {
     config: RetryConfig,
 }
 
+/// Validate retry configuration and return normalized config
+fn validate_config(mut config: RetryConfig) -> RetryConfig {
+    // Ensure base_delay_ms is at least 1ms to avoid zero-delay retries
+    if config.base_delay_ms == 0 {
+        tracing::warn!("Retry config base_delay_ms is 0, using default 100ms");
+        config.base_delay_ms = 100;
+    }
+
+    // Ensure max_delay_ms is not less than base_delay_ms
+    if config.max_delay_ms < config.base_delay_ms {
+        tracing::warn!(
+            "Retry config max_delay_ms ({}) < base_delay_ms ({}), using base_delay_ms as max",
+            config.max_delay_ms,
+            config.base_delay_ms
+        );
+        config.max_delay_ms = config.base_delay_ms;
+    }
+
+    // Ensure max_attempts is at least 1
+    if config.max_attempts == 0 {
+        tracing::warn!("Retry config max_attempts is 0, using default 1");
+        config.max_attempts = 1;
+    }
+
+    config
+}
+
 impl ExponentialBackoffPlugin {
     pub fn new(config: RetryConfig) -> Self {
-        Self { config }
+        Self {
+            config: validate_config(config),
+        }
     }
 }
 
 impl LinearRetryPlugin {
     pub fn new(config: RetryConfig) -> Self {
-        Self { config }
+        Self {
+            config: validate_config(config),
+        }
     }
 }
 

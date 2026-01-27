@@ -1,7 +1,9 @@
 //! 引擎 pre-run：可选记忆检索与 prompt 注入，产出合并后的 query 与 wrapper 事件（用于 replay/观测）。
+use crate::context::Services;
 use crate::gatekeeper::{GatekeeperPlugin, SearchMatch};
 use crate::memory::{
-    merge_prompt, render_memory_context, InjectConfig, MemoryPlugin, QASearchPayload,
+    merge_prompt, render_memory_context, InjectConfig, InjectPlacement, MemoryPlugin,
+    QASearchPayload,
 };
 use crate::tool_event::WrapperEvent;
 
@@ -14,14 +16,50 @@ pub(crate) struct EngineContext<'a> {
     pub memory_min_score: f32,
 }
 
-pub(crate) struct PreRun {
+pub struct PreRun {
     pub merged_query: String,
     pub shown_qa_ids: Vec<String>,
     pub matches: Vec<SearchMatch>,
     pub memory_search_event: Option<WrapperEvent>,
 }
 
-pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun {
+pub async fn pre_run(
+    project_id: &str,
+    cfg: &crate::config::AppConfig,
+    services: &Services,
+    user_query: &str,
+) -> PreRun {
+    let (memory_search_limit, memory_min_score) = match &cfg.memory.provider {
+        crate::config::MemoryProvider::Service(svc_cfg) => {
+            (svc_cfg.search_limit, svc_cfg.min_score)
+        }
+        crate::config::MemoryProvider::Local(local_cfg) => {
+            (local_cfg.search_limit, local_cfg.min_score)
+        }
+        crate::config::MemoryProvider::Hybrid(hybrid_cfg) => {
+            (hybrid_cfg.local.search_limit, hybrid_cfg.local.min_score)
+        }
+    };
+
+    let inject_cfg: InjectConfig = InjectConfig {
+        placement: match cfg.prompt_inject.placement {
+            crate::config::PromptInjectPlacement::System => InjectPlacement::System,
+            crate::config::PromptInjectPlacement::User => InjectPlacement::User,
+        },
+        max_items: cfg.prompt_inject.max_items,
+        max_answer_chars: cfg.prompt_inject.max_answer_chars,
+        include_meta_line: cfg.prompt_inject.include_meta_line,
+    };
+
+    let ctx = EngineContext {
+        project_id,
+        inject_cfg: &inject_cfg,
+        memory: services.memory.as_deref(),
+        gatekeeper: services.gatekeeper.as_ref(),
+        memory_search_limit,
+        memory_min_score,
+    };
+
     tracing::info!(
         target: "memex.qa",
         stage = "pre.start",

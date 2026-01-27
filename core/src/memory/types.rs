@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CandidateDraft {
     pub question: String,
     pub answer: String,
@@ -11,13 +12,13 @@ pub struct CandidateDraft {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum InjectPlacement {
     System,
     User,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InjectConfig {
     pub placement: InjectPlacement,
     pub max_items: usize,
@@ -36,7 +37,7 @@ impl Default for InjectConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CandidateExtractConfig {
     pub max_candidates: usize,
     pub max_answer_chars: usize,

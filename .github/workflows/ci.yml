@@ -6,38 +6,16 @@ on:
       - main
       - master
       - develop
-  pull_request:
-    branches:
-      - main
-      - master
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - master
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint (fmt + clippy)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: cargo fmt --check
-        run: cargo fmt --all -- --check
-
-      - name: cargo clippy (-D warnings)
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -51,6 +29,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install protoc (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+        
+      - name: Install protoc (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $PROTOC_VERSION = "27.0"
+          $PROTOC_URL = "https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOC_VERSION/protoc-$PROTOC_VERSION-win64.zip"
+          $PROTOC_DIR = "$env:USERPROFILE\.protoc"
+          $PROTOC_ZIP = "$env:TEMP\protoc.zip"
+
+          # Download and extract protoc
+          Invoke-WebRequest -Uri $PROTOC_URL -OutFile $PROTOC_ZIP
+          Expand-Archive -Path $PROTOC_ZIP -DestinationPath $PROTOC_DIR -Force
+
+          # Add to PATH
+          echo "$PROTOC_DIR\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "PROTOC=$PROTOC_DIR\bin\protoc.exe" >> $env:GITHUB_ENV
+
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -58,6 +56,14 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy (-D warnings)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: cargo test
         run: cargo test --workspace

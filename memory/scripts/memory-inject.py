@@ -65,33 +65,10 @@ def search_memory_with_fallback(
             return response.get("data", {})
         else:
             error = response.get("error", "Unknown error")
-            log_debug(f"HTTP server returned error: {error}, falling back to direct call")
-            # 继续尝试直接调用
+            log_debug(f"HTTP server returned error: {error}")
 
     except Exception as e:
-        log_debug(f"HTTP server unavailable: {e}, falling back to direct call")
-        # 继续尝试直接调用
-
-    # 方案 B: 降级到直接调用 memex-cli
-    try:
-        log_debug("Using direct memex-cli call...")
-        result = direct_cli_call("search", {
-            "project-id": project_id,
-            "query": query,
-            "limit": limit,
-            "min-score": min_score
-        })
-
-        if result.get("success"):
-            log_debug("✓ Direct call succeeded")
-            return result.get("data")
-        else:
-            log_debug(f"Direct call failed: {result.get('error')}")
-            return None
-
-    except Exception as e:
-        log_debug(f"Direct call error: {e}")
-        return None
+        log_debug(f"HTTP server unavailable: {e}")
 
 
 def main():
@@ -109,7 +86,7 @@ def main():
         project_id = get_project_id_from_cwd(cwd)
         log_debug(f"Project ID: {project_id}")
 
-        # 搜索记忆（优先使用守护进程，失败时降级到直接调用）
+        # 搜索记忆（优先使用 HTTP 服务器，失败时降级到直接调用）
         search_result = search_memory_with_fallback(
             session_id=session_id,
             query=user_prompt,
@@ -125,17 +102,26 @@ def main():
             log_debug("Search returned empty result")
             sys.exit(0)
         log_debug(f"Search Result: {json.dumps(search_result, ensure_ascii=False)}")
+
+        # Normalize response shape
+        # - HTTP server: { merged_query, shown_qa_ids, matches }
+        # - direct-cli fallback (legacy): [matches...]
         if isinstance(search_result, list):
+            merged_query = user_prompt
             matches = search_result
+            shown_qa_ids = [m.get("qa_id", "") for m in matches if isinstance(m, dict) and m.get("qa_id")]
         else:
+            merged_query = search_result.get("merged_query") or user_prompt
             matches = search_result.get("matches", [])
+            shown_qa_ids = search_result.get("shown_qa_ids")
+            if not isinstance(shown_qa_ids, list) or not shown_qa_ids:
+                shown_qa_ids = [m.get("qa_id", "") for m in matches if isinstance(m, dict) and m.get("qa_id")]
 
         if not matches:
             log_debug("No matches found")
             sys.exit(0)
 
-        # 提取 shown_qa_ids
-        shown_qa_ids = [m.get("qa_id", "") for m in matches if m.get("qa_id")]
+        # shown_qa_ids may come from server response; fallback derived above
 
         # 格式化为 Markdown 上下文（使用 HTML 注释标记 QA ID）
         context_lines = [
@@ -165,10 +151,14 @@ def main():
         additional_context = "\n".join(context_lines)
         log_debug(f"Injecting {len(matches)} matches with QA IDs: {shown_qa_ids}")
 
-        # 保存到会话状态（供 Stop Hook 使用）
+        # 保存到会话状态（供 Stop Hook 使用：evaluate-session 需要 matches / merged_query / shown_qa_ids）
         update_session_state(session_id, {
             "shown_qa_ids": shown_qa_ids,
-            "query": user_prompt
+            "query": user_prompt,
+            "merged_query": merged_query,
+            "matches": matches,
+            "project_id": project_id,
+            "updated_at": datetime.now().isoformat(timespec="seconds")
         })
         log_debug(f"Saved shown_qa_ids to session state")
 

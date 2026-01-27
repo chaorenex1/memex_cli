@@ -112,14 +112,69 @@ allowlist = [
 ]
 
 [memory]
-# Default values (defined in core/src/config/types.rs)
+# Memory provider: "service" (remote HTTP), "local" (LanceDB), "hybrid" (local + sync)
 provider = "service"
 enabled = true
+
+# ===== Service Provider (Remote HTTP API) =====
 base_url = "https://memory.internal"
 api_key = ""
 timeout_ms = 10000
 search_limit = 6
 min_score = 0.2
+
+# ===== Local Provider (LanceDB) =====
+# Uncomment to use local storage (requires LanceDB implementation)
+# db_path = "~/.memex/db"
+# search_limit = 6
+# min_score = 0.2
+#
+# [memory.embedding]
+# provider = "ollama"  # Options: ollama | openai | local
+#
+# [memory.embedding.ollama]
+# base_url = "http://localhost:11434"
+# model = "nomic-embed-text"
+# dimension = 768
+#
+# [memory.embedding.openai]
+# base_url = "https://api.openai.com/v1"
+# api_key = ""
+# model = "text-embedding-3-small"
+#
+# [memory.embedding.local]
+# model = "all-MiniLM-L6-v2"  # Options: all-MiniLM-L6-v2 | bge-small-en-v1.5
+# device = "cpu"               # Options: cpu | cuda (NVIDIA GPU) | metal (Apple Silicon)
+# dimension = 384              # Auto-detected from model if 0
+# repo = "sentence-transformers"  # Hugging Face repo
+#
+# [memory.sync]
+# enabled = true           # Enable automatic background sync
+# interval_secs = 300      # Sync interval in seconds (5 minutes)
+# batch_size = 50          # Upload batch size
+# max_retries = 3          # Retry attempts on failure
+# conflict_resolution = "last_write_wins"  # Options: last_write_wins | local_wins | remote_wins | manual
+
+# ===== Hybrid Provider (Local + Remote Sync) =====
+# Uncomment to use hybrid mode (not yet implemented)
+# [memory.local]
+# db_path = "~/.memex/db"
+# search_limit = 6
+# min_score = 0.2
+#
+# [memory.local.embedding]
+# provider = "ollama"
+#
+# [memory.local.sync]
+# enabled = true
+# interval_secs = 300
+#
+# [memory.remote]
+# base_url = "https://memory.internal"
+# api_key = ""
+# timeout_ms = 10000
+#
+# sync_strategy = "local_first"  # Options: local_first | remote_first
 
 [prompt_inject]
 # Default values (defined in core/src/config/types.rs)
@@ -176,7 +231,8 @@ max_output_lines = 10000
 [http_server]
 # Default values (defined in core/src/config/types.rs)
 host = "127.0.0.1"
-port = 8080
+port = 8001
+mode = "remote"        # "local"=直接调用Core, "remote"=通过HTTP调用Server
 
 [stdio]
 # Default values (defined in core/src/config/types.rs)

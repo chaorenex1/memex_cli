@@ -1,11 +1,11 @@
 [package]
 name = "memex-core"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
 description = "Core logic for CodeCLI powered by Memex"
-repository = "https://github.com/chaorenex/memex-cli"
+repository = "https://github.com/chaorenex1/memex-cli"
 
 [dependencies]
 # Core runtime
@@ -39,12 +39,20 @@ indicatif = { workspace = true }
 base64 = { workspace = true }
 glob = { workspace = true }
 
-# Performance optimization (Level 2-3)
-sysinfo = { workspace = true }
-lru = { workspace = true }
-memmap2 = { workspace = true }
+# Optional performance optimizations
+sysinfo = { workspace = true}
+lru = { workspace = true}
+memmap2 = { workspace = true}
 lazy_static = { workspace = true }
 num_cpus = { workspace = true }
+
+# Optional HTTP server dependencies
+# axum = { workspace = true, optional = true }
+# tower = { workspace = true, optional = true }
+# tower-http = { workspace = true, features = ["cors", "trace", "timeout"], optional = true }
+# bytes = { workspace = true }
+# async-stream = { workspace = true }
+# dirs = { version = "5.0", optional = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

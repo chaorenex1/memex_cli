@@ -196,6 +196,12 @@ pub fn parse_stdio_tasks_internal(input: &str) -> Result<Vec<StdioTask>, StdioEr
             files_mode,
             files_encoding,
             content,
+            backend_kind: None,
+            env_file: None,
+            env: None,
+            task_level: None,
+            resume_run_id: None,
+            resume_context: None,
         });
     }
 
@@ -342,6 +348,12 @@ fn build_task_from_metadata_zero_copy(
         files_mode,
         files_encoding,
         content: content.to_string(),
+        backend_kind: None,
+        env_file: None,
+        env: None,
+        task_level: None,
+        resume_run_id: None,
+        resume_context: None,
     })
 }
 

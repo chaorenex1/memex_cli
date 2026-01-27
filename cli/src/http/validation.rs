@@ -1,6 +1,6 @@
 //! 基础请求验证逻辑
 
-use crate::http::models::HttpServerError;
+use super::models::HttpServerError;
 
 /// 验证record-candidate请求的基础字段
 pub fn validate_candidate(question: &str, answer: &str) -> Result<(), HttpServerError> {

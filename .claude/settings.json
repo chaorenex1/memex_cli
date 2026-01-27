@@ -1,10 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Skill(memex-cli)",
-      "Skill(code-with-codex)",
-      "Skill(ux-design-gemini)",
-      "Skill(/multcode)",
+      "Skill(coding-workflow:memex-cli)",
+      "Skill(coding-workflow:code-with-codex)",
+      "Skill(coding-workflow:ux-design-gemini)",
+      "Skill(coding-workflow:/multcode)",
       "Bash(memex-cli)",
       "Read",
       "Search"

@@ -6,6 +6,7 @@ pub mod parsers;
 pub mod protocol;
 mod render;
 mod retry;
+pub mod serde_utils;
 mod types;
 
 pub use crate::error::stdio::{ErrorCode, StdioError, StdioParseError};
@@ -20,4 +21,11 @@ pub use render::{
     JsonlEvent, RenderOutcome, RenderTaskInfo, TextMarkers,
 };
 pub use retry::{effective_timeout_secs, exit_code_for_timeout, max_attempts};
+pub use serde_utils::{
+    read_stdio_run_opts_json_file, read_stdio_task_json_file, read_stdio_tasks_json_file,
+    stdio_run_opts_from_json, stdio_run_opts_to_json, stdio_run_opts_to_pretty_json,
+    stdio_task_from_json, stdio_task_to_json, stdio_task_to_pretty_json, stdio_tasks_from_json,
+    stdio_tasks_to_json, write_stdio_run_opts_json_file, write_stdio_task_json_file,
+    write_stdio_tasks_json_file,
+};
 pub use types::{FilesEncoding, FilesMode, StdioRunOpts, StdioTask};

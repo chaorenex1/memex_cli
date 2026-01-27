@@ -88,6 +88,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install protoc (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install protobuf
+
+      - name: Install protoc (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $PROTOC_VERSION = "27.0"
+          $PROTOC_URL = "https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOC_VERSION/protoc-$PROTOC_VERSION-win64.zip"
+          $PROTOC_DIR = "$env:USERPROFILE\.protoc"
+          $PROTOC_ZIP = "$env:TEMP\protoc.zip"
+
+          # Download and extract protoc
+          Invoke-WebRequest -Uri $PROTOC_URL -OutFile $PROTOC_ZIP
+          Expand-Archive -Path $PROTOC_ZIP -DestinationPath $PROTOC_DIR -Force
+
+          # Add to PATH
+          echo "$PROTOC_DIR\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "PROTOC=$PROTOC_DIR\bin\protoc.exe" >> $env:GITHUB_ENV
+
       - name: Show version info
         run: |
           echo "Building memex-cli for ${{ matrix.target }}"

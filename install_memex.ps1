@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $REPO = "chaorenex1/memex-cli"
 $NAME = "memex-cli"
-$INSTALL_DIR = "$env:USERPROFILE\.memex\bin"
+$INSTALL_DIR = "$env:USERPROFILE\.local\bin"
 
 # Helper functions
 function Info-Log {
@@ -54,8 +54,8 @@ $FILENAME = "memex-cli-${TARGET_ARCH}-${TARGET_OS}.${EXTENSION}"
 Info-Log "System: Windows/$ARCH"
 Info-Log "Target: $FILENAME"
 
-# Create temp dir
-$TMP = Join-Path $env:TEMP "memex-install-$((New-Guid).Guid)"
+# Create temp dir (use .NET method for compatibility with PowerShell < 5.1)
+$TMP = Join-Path $env:TEMP "memex-install-$([System.Guid]::NewGuid())"
 New-Item -ItemType Directory -Path $TMP -Force | Out-Null
 
 try {
@@ -187,6 +187,18 @@ try {
         }
     } else {
         Success-Log "$INSTALL_DIR already in PATH"
+    }
+
+    # Install via npm as additional installation method
+    Write-Host ""
+    Info-Log "Installing via npm (additional method)..."
+    try {
+        $null = npm --version 2>$null
+        npm install -g "$NAME"
+        Success-Log "npm installation complete"
+    }
+    catch {
+        Warn-Log "npm installation skipped (npm not available or failed)"
     }
 
     # Verify

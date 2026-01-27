@@ -17,16 +17,23 @@ impl RingBytes {
 
     pub fn push(&self, data: &[u8]) {
         let mut g = self.inner.lock().unwrap();
-        for &b in data {
-            if g.len() == self.cap {
-                g.pop_front();
-            }
-            g.push_back(b);
+        let data = if data.len() > self.cap {
+            &data[data.len() - self.cap..]
+        } else {
+            data
+        };
+        let overflow = g.len().saturating_add(data.len()).saturating_sub(self.cap);
+        if overflow > 0 {
+            g.drain(..overflow);
         }
+        g.extend(data);
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let g = self.inner.lock().unwrap();
-        g.iter().cloned().collect()
+        // Pre-allocate exact capacity to avoid reallocation
+        let mut vec = Vec::with_capacity(g.len());
+        vec.extend(g.iter().copied());
+        vec
     }
 }

@@ -1,11 +1,11 @@
 [package]
 name = "memex-cli"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
 description = "Core logic for CodeCLI powered by Memex"
-repository = "https://github.com/chaorenex/memex-cli"
+repository = "https://github.com/chaorenex1/memex-cli"
 
 [dependencies]
 # Workspace members
@@ -34,21 +34,31 @@ tracing-appender = { workspace = true }
 
 # Time & UUID
 chrono = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v4"] }
+shellexpand = { workspace = true}
 
-# TUI (Terminal UI)
-ratatui = { workspace = true }
-crossterm = { workspace = true }
-atty = { workspace = true }
+# Optional TUI dependencies
+ratatui = { workspace = true}
+crossterm = { workspace = true}
+atty = { workspace = true}
 
-# HTTP server
+# HTTP client (for daemon)
+reqwest = { workspace = true }
+futures = { workspace = true }
+
+# Optional HTTP server dependencies
 axum = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true, features = ["fs"] }
+tower = { workspace = true}
+tower-http = { workspace = true,features = ["util"]}
+bytes = { workspace = true }
+async-stream = { workspace = true }
 
-# System utilities
+# Optional system utilities
 arboard = { workspace = true }
 dirs = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
 
 [build-dependencies]
 # Windows resource compiler for embedding icon and version info

@@ -29,6 +29,7 @@ pub enum RunnerSpec {
         model_provider: Option<String>,
         project_id: Option<String>,
         stream_format: String,
+        task_level: Option<String>,
     },
     Passthrough {
         runner: Box<dyn RunnerPlugin>,

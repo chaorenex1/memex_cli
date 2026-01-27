@@ -10,6 +10,31 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
+/// 检查是否应该使用远程模式
+fn should_use_remote_mode(ctx: &AppContext) -> bool {
+    ctx.cfg().http_server.mode == "remote"
+}
+
+/// 确保服务器正在运行（如果未运行则自动启动）
+async fn ensure_server_running(server_url: &str) -> Result<(), CliError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .map_err(|e| CliError::Io(std::io::Error::other(e)))?;
+
+    let health_url = format!("{}/health", server_url);
+
+    // 检查服务器是否运行
+    match client.get(&health_url).send().await {
+        Ok(resp) if resp.status().is_success() => return Ok(()),
+        _ => {} // 服务器未运行，继续启动
+    }
+
+    Err(CliError::Command(
+        "Server failed to start within timeout".to_string(),
+    ))
+}
+
 static LOG_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> =
     std::sync::OnceLock::new();
 
@@ -93,10 +118,21 @@ fn exit_code_for_error(e: &CliError) -> i32 {
 }
 
 async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Result<i32, CliError> {
+    let is_remote = should_use_remote_mode(&ctx);
+    let server_url = format!(
+        "http://{}:{}",
+        ctx.cfg().http_server.host,
+        ctx.cfg().http_server.port
+    );
     match cmd {
         cli::Commands::Run(run_args) => {
+            if is_remote {
+                // 远程模式：确保服务器运行，然后通过 HTTP 调用 Core Server
+                ensure_server_running(&server_url).await?;
+            }
             let exit =
-                memex_cli::app::run_app_with_config(args, Some(run_args), None, &ctx).await?;
+                memex_cli::app::run_app_with_config(args, Some(run_args), None, &is_remote, &ctx)
+                    .await?;
             Ok(exit)
         }
         cli::Commands::Replay(replay_args) => {
@@ -111,11 +147,16 @@ async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Resul
             Ok(0)
         }
         cli::Commands::Resume(resume_args) => {
+            if is_remote {
+                // 远程模式：确保服务器运行，然后通过 HTTP 调用 Core Server
+                ensure_server_running(&server_url).await?;
+            }
             let recover_id = Some(resume_args.run_id.clone());
-            let exit = memex_cli::app::run_app_with_config(
+            let exit: i32 = memex_cli::app::run_app_with_config(
                 args,
                 Some(resume_args.run_args),
                 recover_id,
+                &is_remote,
                 &ctx,
             )
             .await?;
@@ -142,7 +183,19 @@ async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Resul
             Ok(0)
         }
         cli::Commands::HttpServer(http_args) => {
-            memex_cli::commands::http_server::handle_http_server(http_args, &ctx).await?;
+            memex_cli::http::server::handle_http_server(http_args, &ctx).await?;
+            Ok(0)
+        }
+        cli::Commands::Init(init_args) => {
+            memex_cli::commands::init::handle_init(init_args, &ctx).await?;
+            Ok(0)
+        }
+        cli::Commands::Sync(sync_args) => {
+            memex_cli::commands::sync::handle_sync(sync_args, &ctx).await?;
+            Ok(0)
+        }
+        cli::Commands::Db(db_args) => {
+            memex_cli::commands::db::handle_db(db_args, &ctx).await?;
             Ok(0)
         }
     }

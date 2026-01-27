@@ -21,6 +21,7 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
             model_provider,
             project_id,
             stream_format,
+            task_level: _,
         } = request;
 
         tracing::debug!("AiServiceBackendStrategy planning with backend: {}, project_id: {:?}, model: {:?}, model_provider: {:?}", backend, project_id, model, model_provider);

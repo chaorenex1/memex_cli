@@ -38,7 +38,11 @@ where
 
     for id in task_ids {
         let Some(task) = graph.nodes.get(id) else {
-            continue;
+            // Task ID from topological sort should always exist in graph
+            return Err(ExecutorError::Runner(format!(
+                "Task '{}' not found in graph (internal error)",
+                id
+            )));
         };
 
         let task_id = task.id().to_string();

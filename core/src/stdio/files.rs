@@ -1,4 +1,3 @@
-#![deprecated(note = "Use executor FileProcessorPlugin instead.")]
 //! 文件处理模块：负责STDIO任务的文件解析、读取和prompt组装
 
 use crate::api::StdioTask;

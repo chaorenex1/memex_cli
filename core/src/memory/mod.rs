@@ -1,5 +1,6 @@
 pub mod adapters;
 pub mod models;
+pub mod syncable;
 pub mod r#trait;
 
 mod candidates;
@@ -9,6 +10,7 @@ mod render;
 mod types;
 
 pub use r#trait::MemoryPlugin;
+pub use syncable::{SyncStatusReport, SyncableMemory};
 
 pub use adapters::parse_search_matches;
 pub use models::{

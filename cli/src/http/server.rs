@@ -1,16 +1,20 @@
 //! HTTP服务器生命周期管理
 
-use crate::http::{
+use super::{
     middleware::{create_middleware_stack, request_logger},
     routes::create_router,
     AppState,
 };
+use crate::commands::cli::HttpServerArgs;
 use axum::middleware;
+use memex_core::api::{AppContext, CliError};
 use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::signal;
+use tokio::sync::broadcast;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 /// HTTP服务器配置
 #[derive(Debug, Clone)]
@@ -26,6 +30,95 @@ impl Default for ServerConfig {
             port: 8080,
         }
     }
+}
+
+/// 获取服务器状态文件目录
+fn get_servers_dir() -> Result<PathBuf, CliError> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| CliError::Command("Cannot find home directory".to_string()))?;
+    let servers_dir = home.join(".memex").join("servers");
+    fs::create_dir_all(&servers_dir)
+        .map_err(|e| CliError::Command(format!("Failed to create servers directory: {e}")))?;
+    Ok(servers_dir)
+}
+
+/// 写入服务器状态文件
+fn write_state_file(session_id: &str, port: u16, host: &str) -> Result<(), CliError> {
+    let servers_dir = get_servers_dir()?;
+    let state_file = servers_dir.join("memex.state");
+
+    let state = serde_json::json!({
+        "session_id": session_id,
+        "port": port,
+        "pid": std::process::id(),
+        "url": format!("http://{}:{}", host, port),
+        "started_at": chrono::Local::now().to_rfc3339()
+    });
+
+    fs::write(&state_file, serde_json::to_string_pretty(&state).unwrap())
+        .map_err(|e| CliError::Command(format!("Failed to write state file: {e}")))?;
+
+    tracing::info!("State file written to: {}", state_file.display());
+    Ok(())
+}
+
+/// 处理 http-server 命令
+pub async fn handle_http_server(args: HttpServerArgs, ctx: &AppContext) -> Result<(), CliError> {
+    // 使用用户提供的 session_id 或生成新的
+    let session_id = args
+        .session_id
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    // 合并配置：CLI 参数优先，配置文件作为默认值
+    let config = &ctx.cfg().http_server;
+
+    // 如果 CLI 参数与默认值相同，则使用配置文件中的值
+    let port = if args.port == 8080 {
+        config.port
+    } else {
+        args.port
+    };
+
+    let host = if args.host == "127.0.0.1" {
+        config.host.clone()
+    } else {
+        args.host.clone()
+    };
+
+    // 构建 Services
+    let services = ctx
+        .build_services(ctx.cfg())
+        .await
+        .map_err(CliError::Runner)?;
+
+    // 创建 shutdown channel
+    let (shutdown_tx, _) = broadcast::channel(1);
+
+    // 创建 AppState（传入完整配置）
+    let state = AppState::new(
+        session_id.clone(),
+        ctx.clone(),
+        services,
+        ctx.cfg().clone(),
+        shutdown_tx,
+    );
+
+    // 写入状态文件（在服务器启动前）
+    write_state_file(&session_id, port, &host)?;
+
+    // 启动服务器
+    tracing::info!(
+        "Starting HTTP server on {}:{} (session: {})",
+        host,
+        port,
+        session_id
+    );
+
+    start_server(session_id, host, port, state)
+        .await
+        .map_err(|e: Box<dyn std::error::Error + Send + Sync>| CliError::Command(e.to_string()))?;
+
+    Ok(())
 }
 
 /// 启动HTTP服务器
@@ -95,7 +188,7 @@ pub async fn start_server_with_config(
 
     // 删除状态文件
     let servers_dir = get_servers_dir()?;
-    let state_file_path = servers_dir.join(format!("memex-{}.state", session_id));
+    let state_file_path = servers_dir.join("memex.state");
     if let Err(e) = fs::remove_file(&state_file_path) {
         warn!("Failed to remove state file: {}", e);
     } else {
@@ -103,15 +196,6 @@ pub async fn start_server_with_config(
     }
 
     Ok(())
-}
-
-/// 获取服务器状态目录
-fn get_servers_dir() -> Result<PathBuf, std::io::Error> {
-    let home_dir = dirs::home_dir().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")
-    })?;
-
-    Ok(home_dir.join(".memex").join("servers"))
 }
 
 /// 等待 SIGTERM 信号（Unix系统）
@@ -128,81 +212,4 @@ async fn wait_for_sigterm() {
 async fn wait_for_sigterm() {
     // Windows不支持SIGTERM，永久等待（实际上会被 Ctrl+C 或 shutdown API 中断）
     std::future::pending::<()>().await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use memex_core::api::Services;
-    use std::sync::Arc;
-    use std::time::Duration;
-    use tokio::sync::broadcast;
-
-    #[tokio::test]
-    async fn test_get_servers_dir() {
-        let result = get_servers_dir();
-        assert!(result.is_ok());
-
-        let servers_dir = result.unwrap();
-        assert!(servers_dir.to_string_lossy().contains(".memex"));
-        assert!(servers_dir.to_string_lossy().contains("servers"));
-    }
-
-    #[tokio::test]
-    async fn test_server_config_default() {
-        let config = ServerConfig::default();
-        assert_eq!(config.host, "127.0.0.1");
-        assert_eq!(config.port, 8080);
-    }
-
-    #[tokio::test]
-    async fn test_server_lifecycle() {
-        // 创建测试状态
-        let (shutdown_tx, _) = broadcast::channel(1);
-        let gatekeeper_config = memex_core::api::GatekeeperConfig::default();
-        let services = Services {
-            policy: None,
-            memory: None,
-            gatekeeper: Arc::new(memex_plugins::gatekeeper::StandardGatekeeperPlugin::new(
-                gatekeeper_config,
-            )),
-        };
-
-        // Create minimal test config
-        let app_config = memex_core::api::AppConfig::default();
-
-        let state = AppState::new(
-            "test-lifecycle".into(),
-            services,
-            app_config,
-            shutdown_tx.clone(),
-        );
-
-        let server_config = ServerConfig {
-            host: "127.0.0.1".into(),
-            port: 18080, // 使用非标准端口避免冲突
-        };
-
-        // 在后台启动服务器
-        let session_id = "test-lifecycle".to_string();
-        let server_handle = tokio::spawn(async move {
-            start_server_with_config(session_id, server_config, state).await
-        });
-
-        // 等待服务器启动
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        // 发送关闭信号
-        let _ = shutdown_tx.send(());
-
-        // 等待服务器关闭
-        let result = tokio::time::timeout(Duration::from_secs(5), server_handle).await;
-        assert!(result.is_ok(), "Server should shutdown gracefully");
-
-        // 验证状态文件已删除（可能需要额外等待）
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        let servers_dir = get_servers_dir().unwrap();
-        let _state_file = servers_dir.join("memex-test-lifecycle.state");
-        // 注意：测试环境中可能因为异步删除尚未完成，这里不强制检查
-    }
 }

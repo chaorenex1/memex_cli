@@ -13,8 +13,9 @@ pub struct Services {
     pub gatekeeper: Arc<dyn GatekeeperPlugin>,
 }
 
+#[async_trait::async_trait]
 pub trait ServicesFactory: Send + Sync {
-    fn build_services(&self, cfg: &AppConfig) -> Result<Services, RunnerError>;
+    async fn build_services(&self, cfg: &AppConfig) -> Result<Services, RunnerError>;
 }
 
 #[derive(Clone)]
@@ -55,12 +56,12 @@ impl AppContext {
         }
     }
 
-    pub fn build_services(&self, cfg: &AppConfig) -> Result<Services, RunnerError> {
+    pub async fn build_services(&self, cfg: &AppConfig) -> Result<Services, RunnerError> {
         let Some(factory) = self.services_factory.as_ref() else {
             return Err(RunnerError::Config(
                 "services_factory missing (cannot build plugins/services)".into(),
             ));
         };
-        factory.build_services(cfg)
+        factory.build_services(cfg).await
     }
 }

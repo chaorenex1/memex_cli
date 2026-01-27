@@ -67,7 +67,10 @@ fn shorten(v: &Value, value_max_chars: usize) -> String {
     let t = s.trim().replace('\n', " ");
 
     let value_max_chars = value_max_chars.max(1);
-    if t.chars().count() <= value_max_chars {
+    // Use byte length as fast path - valid UTF-8: chars() <= bytes()
+    // Only count chars when byte length suggests truncation needed
+    let is_within_limit = t.len() <= value_max_chars || t.chars().count() <= value_max_chars;
+    if is_within_limit {
         t
     } else {
         let take_chars = value_max_chars.saturating_sub(1).max(1);

@@ -6,12 +6,11 @@ use chrono::Local;
 use crate::backend::BackendPlan;
 use crate::error::RunnerError;
 use crate::events_out::write_wrapper_event;
-use crate::memory::{CandidateExtractConfig, InjectConfig, InjectPlacement};
 use crate::runner::{RunnerResult, RunnerStartArgs};
 use crate::tool_event::WrapperEvent;
 
-use super::post::{post_run, PostRunContext};
-use super::pre::{pre_run, EngineContext};
+use super::post::post_run;
+use super::pre::pre_run;
 use super::types::{RunSessionInput, RunWithQueryArgs, RunnerSpec};
 
 pub async fn run_with_query<F, Fut>(
@@ -35,65 +34,21 @@ where
         wrapper_start_data,
     } = args;
 
-    let inject_cfg: InjectConfig = InjectConfig {
-        placement: match cfg.prompt_inject.placement {
-            crate::config::PromptInjectPlacement::System => InjectPlacement::System,
-            crate::config::PromptInjectPlacement::User => InjectPlacement::User,
-        },
-        max_items: cfg.prompt_inject.max_items,
-        max_answer_chars: cfg.prompt_inject.max_answer_chars,
-        include_meta_line: cfg.prompt_inject.include_meta_line,
-    };
+    tracing::info!("run_with_query: run_id={}", run_id);
+    let policy = services.policy.clone();
 
-    tracing::info!(
-        "run_with_query: run_id={}, inject_placement={:?}, inject_max_items={}",
-        run_id,
-        inject_cfg.placement,
-        inject_cfg.max_items
-    );
-    let memory = services.memory;
-    let gatekeeper = services.gatekeeper;
-    let policy = services.policy;
+    let pre = pre_run(&project_id, &cfg, &services, &user_query).await;
 
-    let cand_cfg: CandidateExtractConfig = CandidateExtractConfig {
-        max_candidates: cfg.candidate_extract.max_candidates,
-        max_answer_chars: cfg.candidate_extract.max_answer_chars,
-        min_answer_chars: cfg.candidate_extract.min_answer_chars,
-        context_lines: cfg.candidate_extract.context_lines,
-        tool_steps_max: cfg.candidate_extract.tool_steps_max,
-        tool_step_args_keys_max: cfg.candidate_extract.tool_step_args_keys_max,
-        tool_step_value_max_chars: cfg.candidate_extract.tool_step_value_max_chars,
-        redact: cfg.candidate_extract.redact,
-        strict_secret_block: cfg.candidate_extract.strict_secret_block,
-        confidence: cfg.candidate_extract.confidence,
-    };
-
-    let (memory_search_limit, memory_min_score) = match &cfg.memory.provider {
-        crate::config::MemoryProvider::Service(svc_cfg) => {
-            (svc_cfg.search_limit, svc_cfg.min_score)
-        }
-    };
-
-    let pre_ctx = EngineContext {
-        project_id: &project_id,
-        inject_cfg: &inject_cfg,
-        memory: memory.as_deref(),
-        gatekeeper: gatekeeper.as_ref(),
-        memory_search_limit,
-        memory_min_score,
-    };
-
-    let pre = pre_run(&pre_ctx, &user_query).await;
-    let merged_query = pre.merged_query;
-    let shown_qa_ids = pre.shown_qa_ids;
-    let matches = pre.matches;
-    let memory_search_event = pre.memory_search_event;
+    let merged_query = pre.merged_query.clone();
+    let shown_qa_ids = pre.shown_qa_ids.clone();
+    let matches = pre.matches.clone();
+    let memory_search_event = pre.memory_search_event.clone();
 
     tracing::info!(
         "run_with_query: run_id={}, merged_query_len={}, shown_qa_ids={:?}, matches_len={}",
         run_id,
         merged_query.len(),
-        shown_qa_ids,
+        shown_qa_ids.len(),
         matches.len()
     );
 
@@ -199,17 +154,16 @@ where
         write_wrapper_event(events_out_tx.as_ref(), &ev).await;
     }
 
-    let post_ctx = PostRunContext {
-        project_id: &project_id,
-        cand_cfg: &cand_cfg,
-        memory: memory.as_deref(),
-        gatekeeper: gatekeeper.as_ref(),
-        events_out: events_out_tx.as_ref(),
-    };
-
-    let (run_outcome, _decision) =
-        post_run(&post_ctx, &run_result, &matches, shown_qa_ids, &user_query).await?;
-
+    let (run_outcome, _decision) = post_run(
+        &run_result,
+        &pre,
+        &project_id,
+        &cfg,
+        &services,
+        &events_out_tx,
+        &user_query,
+    )
+    .await?;
     let mut exit_event = WrapperEvent::new("run.end", Local::now().to_rfc3339());
     exit_event.run_id = Some(effective_run_id);
     exit_event.data = Some(serde_json::json!({
@@ -243,6 +197,7 @@ fn build_runner_and_args(
             model_provider,
             project_id,
             stream_format,
+            task_level,
         } => {
             let request = crate::backend::BackendPlanRequest {
                 backend: backend_spec,
@@ -253,6 +208,7 @@ fn build_runner_and_args(
                 model_provider,
                 project_id,
                 stream_format,
+                task_level,
             };
 
             let BackendPlan {

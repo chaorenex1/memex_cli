@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 /// Execution options for the current executor engine (legacy path).
 #[derive(Debug, Clone)]
@@ -51,6 +52,12 @@ pub struct ExecutionOpts {
 
     /// Memory-mapped I/O threshold in MB
     pub mmap_threshold_mb: u64,
+
+    /// Optional HTTP streaming channel.
+    ///
+    /// When set, the executor will route each task's runner output through `HttpSseSink`
+    /// instead of writing to process stdout/stderr.
+    pub http_sse_tx: Option<mpsc::UnboundedSender<Vec<u8>>>,
 }
 
 impl ExecutionOpts {
@@ -77,6 +84,7 @@ impl ExecutionOpts {
             enable_file_cache: true,
             enable_mmap_large_files: true,
             mmap_threshold_mb: 10,
+            http_sse_tx: None,
         }
     }
 
@@ -86,7 +94,7 @@ impl ExecutionOpts {
         stdio_config: &crate::config::StdioConfig,
     ) -> Self {
         // Enable progress bar only for text output (not jsonl) and when not quiet
-        let progress_bar = opts.stream_format == "text" && !opts.quiet;
+        let progress_bar = !opts.quiet;
 
         Self {
             stream_format: opts.stream_format.clone(),
@@ -94,7 +102,7 @@ impl ExecutionOpts {
             verbose: opts.verbose,
             quiet: opts.quiet,
             ascii: opts.ascii,
-            max_parallel: None,
+            max_parallel: Some(stdio_config.max_parallel_tasks),
             resume_run_id: opts.resume_run_id.clone(),
             resume_context: opts.resume_context.clone(),
             progress_bar,
@@ -106,6 +114,7 @@ impl ExecutionOpts {
             enable_file_cache: stdio_config.enable_file_cache,
             enable_mmap_large_files: stdio_config.enable_mmap_large_files,
             mmap_threshold_mb: stdio_config.mmap_threshold_mb,
+            http_sse_tx: None,
         }
     }
 }

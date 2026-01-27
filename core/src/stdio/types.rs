@@ -1,18 +1,22 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum FilesMode {
     Embed,
     Ref,
     Auto,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum FilesEncoding {
     Utf8,
     Base64,
     Auto,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StdioTask {
     pub id: String,
     pub backend: String,
@@ -27,6 +31,12 @@ pub struct StdioTask {
     pub files_mode: FilesMode,
     pub files_encoding: FilesEncoding,
     pub content: String,
+    pub backend_kind: Option<crate::config::BackendKind>,
+    pub env_file: Option<String>,
+    pub env: Option<Vec<String>>,
+    pub task_level: Option<String>,
+    pub resume_run_id: Option<String>,
+    pub resume_context: Option<String>,
 }
 
 impl StdioTask {
@@ -78,12 +88,12 @@ impl crate::executor::types::TaskLike for StdioTask {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StdioRunOpts {
     pub stream_format: String,
-    pub ascii: bool,
     pub verbose: bool,
     pub quiet: bool,
+    pub ascii: bool,
     pub capture_bytes: usize,
     pub resume_run_id: Option<String>,
     pub resume_context: Option<String>,

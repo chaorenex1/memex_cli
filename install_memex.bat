@@ -126,6 +126,21 @@ if %errorlevel% neq 0 (
     echo [OK] %INSTALL_DIR% already in PATH
 )
 
+:: Install via npm as additional installation method
+echo.
+echo [INFO] Installing via npm (additional method)...
+where npm >nul 2>&1
+if %errorlevel% equ 0 (
+    npm install -g %NAME% >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo [OK] npm installation complete
+    ) else (
+        echo [WARN] npm installation failed
+    )
+) else (
+    echo [INFO] npm not available, skipping...
+)
+
 :: Cleanup
 rd /s /q "%TMP%" 2>nul
 

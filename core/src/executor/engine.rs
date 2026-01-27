@@ -21,6 +21,62 @@ use super::traits::{
 };
 use super::types::{ExecutionOpts, ExecutionResult, TaskResult};
 
+struct SystemInfoCache {
+    cpu_count: usize,
+    last_refresh: Instant,
+    cached_cpu_usage: f32,
+    cached_memory_usage: f32,
+}
+
+impl SystemInfoCache {
+    fn new() -> Self {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_cpu();
+        sys.refresh_memory();
+        let cpu_count = sys.cpus().len().max(1);
+        let cpu_usage = sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / cpu_count as f32;
+        let total_memory = sys.total_memory().max(1);
+        let memory_usage = (sys.used_memory() as f32 / total_memory as f32) * 100.0;
+
+        Self {
+            cpu_count,
+            last_refresh: Instant::now(),
+            cached_cpu_usage: cpu_usage,
+            cached_memory_usage: memory_usage,
+        }
+    }
+
+    fn get(&mut self) -> (usize, f32, f32) {
+        if self.last_refresh.elapsed() > Duration::from_secs(1) {
+            // Reuse single System instance instead of creating new one - significant CPU savings
+            // This avoids the overhead of re-detecting system hardware on each refresh
+            static mut SYS: Option<sysinfo::System> = None;
+            static INIT: std::sync::Once = std::sync::Once::new();
+
+            unsafe {
+                INIT.call_once(|| {
+                    SYS = Some(sysinfo::System::new());
+                });
+                if let Some(ref mut sys) = SYS {
+                    sys.refresh_cpu();
+                    sys.refresh_memory();
+                    self.cached_cpu_usage = sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>()
+                        / self.cpu_count as f32;
+                    let total_memory = sys.total_memory().max(1);
+                    self.cached_memory_usage =
+                        (sys.used_memory() as f32 / total_memory as f32) * 100.0;
+                }
+            }
+            self.last_refresh = Instant::now();
+        }
+        (
+            self.cpu_count,
+            self.cached_cpu_usage,
+            self.cached_memory_usage,
+        )
+    }
+}
+
 /// Execution engine for task dependency graphs
 pub struct ExecutionEngine<'a> {
     ctx: &'a AppContext,
@@ -29,6 +85,7 @@ pub struct ExecutionEngine<'a> {
     renderer: Option<Arc<dyn OutputRendererPlugin>>,
     retry_strategy: Option<Arc<dyn RetryStrategyPlugin>>,
     concurrency_strategy: Option<Arc<dyn ConcurrencyStrategyPlugin>>,
+    sys_cache: Mutex<SystemInfoCache>,
 }
 
 pub struct ExecutionEngineBuilder<'a> {
@@ -38,6 +95,7 @@ pub struct ExecutionEngineBuilder<'a> {
     renderer: Option<Arc<dyn OutputRendererPlugin>>,
     retry_strategy: Option<Arc<dyn RetryStrategyPlugin>>,
     concurrency_strategy: Option<Arc<dyn ConcurrencyStrategyPlugin>>,
+    sys_cache: Mutex<SystemInfoCache>,
 }
 
 impl<'a> ExecutionEngine<'a> {
@@ -49,6 +107,7 @@ impl<'a> ExecutionEngine<'a> {
             renderer: None,
             retry_strategy: None,
             concurrency_strategy: None,
+            sys_cache: Mutex::new(SystemInfoCache::new()),
         }
     }
 
@@ -59,7 +118,7 @@ impl<'a> ExecutionEngine<'a> {
     /// Execute tasks with dependency graph support using injected plugins.
     pub async fn execute_tasks<F>(
         &self,
-        tasks: Vec<StdioTask>,
+        tasks: &Vec<StdioTask>,
         planner: F,
     ) -> Result<ExecutionResult, ExecutorError>
     where
@@ -73,7 +132,16 @@ impl<'a> ExecutionEngine<'a> {
             + Sync
             + 'static,
     {
-        let run_id = Uuid::new_v4().to_string();
+        let run_id = tasks
+            .first()
+            .and_then(|t| {
+                if !t.id.is_empty() {
+                    Some(t.id.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
 
         let graph = TaskGraph::from_tasks(tasks)?;
         graph.validate()?;
@@ -216,7 +284,12 @@ impl<'a> ExecutionEngine<'a> {
             .concurrency_strategy
             .as_ref()
             .map(|strategy| {
-                let context = build_concurrency_context(self.ctx, base_parallel, task_ids.len());
+                let context = build_concurrency_context(
+                    self.ctx,
+                    base_parallel,
+                    task_ids.len(),
+                    &self.sys_cache,
+                );
                 strategy.calculate_concurrency(&context)
             })
             .unwrap_or(base_parallel)
@@ -252,6 +325,7 @@ impl<'a> ExecutionEngine<'a> {
         let services = Arc::new(
             self.ctx
                 .build_services(self.ctx.cfg())
+                .await
                 .map_err(|e| ExecutorError::Runner(e.to_string()))?,
         );
 
@@ -328,67 +402,79 @@ impl<'a> ExecutionEngine<'a> {
                 task_to_run.content = exec_task.content;
 
                 // Execute task using the injected planner (with optional retry strategy)
-                let mut total_duration_ms: u64 = 0;
-                let mut retries_used: u32 = 0;
-                let mut last_exit_code: i32;
-                let mut last_output: String;
-
                 let max_attempts = retry_strategy
                     .as_ref()
                     .map(|strategy| strategy.max_attempts().max(1))
                     .unwrap_or(1);
 
-                let mut attempt: u32 = 0;
-                loop {
-                    let mut attempt_task = task_to_run.clone();
-                    if retry_strategy.is_some() {
-                        attempt_task.retry = Some(0);
+                // First attempt
+                let mut current = execute_task_once(
+                    {
+                        let mut t = task_to_run.clone();
+                        if retry_strategy.is_some() {
+                            t.retry = Some(0);
+                        }
+                        t
+                    },
+                    &ctx,
+                    &opts,
+                    &stdio_opts,
+                    planner.clone(),
+                    services.clone(),
+                    &run_id,
+                    dep_context_opt.clone(),
+                )
+                .await?;
+
+                // Retry if needed
+                let mut retries_used: u32 = 0;
+                if current.exit_code != 0 {
+                    if let Some(strategy) = &retry_strategy {
+                        for attempt in 1..max_attempts {
+                            let err = format!("exit_code: {}", current.exit_code);
+                            if !strategy.should_retry(attempt, &err) {
+                                break;
+                            }
+
+                            let Some(delay) = strategy.next_delay(attempt, &err) else {
+                                break;
+                            };
+
+                            tokio::time::sleep(delay).await;
+
+                            let retry_outcome = execute_task_once(
+                                {
+                                    let mut t = task_to_run.clone();
+                                    t.retry = Some(attempt);
+                                    t
+                                },
+                                &ctx,
+                                &opts,
+                                &stdio_opts,
+                                planner.clone(),
+                                services.clone(),
+                                &run_id,
+                                dep_context_opt.clone(),
+                            )
+                            .await?;
+
+                            current.duration_ms = current
+                                .duration_ms
+                                .saturating_add(retry_outcome.duration_ms);
+                            current.exit_code = retry_outcome.exit_code;
+                            current.output = retry_outcome.output;
+                            retries_used = attempt;
+
+                            if current.exit_code == 0 {
+                                break;
+                            }
+                        }
                     }
-
-                    let task_outcome = execute_task_once(
-                        attempt_task,
-                        &ctx,
-                        &stdio_opts,
-                        planner.clone(),
-                        services.clone(),
-                        &run_id,
-                        dep_context_opt.clone(),
-                    )
-                    .await?;
-
-                    total_duration_ms = total_duration_ms.saturating_add(task_outcome.duration_ms);
-                    last_exit_code = task_outcome.exit_code;
-                    last_output = task_outcome.output;
-
-                    if last_exit_code == 0 {
-                        break;
-                    }
-
-                    let Some(strategy) = &retry_strategy else {
-                        break;
-                    };
-
-                    if attempt + 1 >= max_attempts {
-                        break;
-                    }
-
-                    let err = format!("exit_code: {}", last_exit_code);
-                    if !strategy.should_retry(attempt + 1, &err) {
-                        break;
-                    }
-
-                    let Some(delay) = strategy.next_delay(attempt + 1, &err) else {
-                        break;
-                    };
-
-                    retries_used = retries_used.saturating_add(1);
-                    attempt = attempt.saturating_add(1);
-                    tokio::time::sleep(delay).await;
                 }
 
-                // Emit task complete event
-                let final_exit_code = last_exit_code;
-                let final_output = last_output;
+                let total_duration_ms = current.duration_ms;
+                let final_exit_code = current.exit_code;
+                let final_output = current.output;
 
                 emit_task_complete(
                     &opts,
@@ -528,6 +614,7 @@ impl<'a> ExecutionEngineBuilder<'a> {
             renderer: None,
             retry_strategy: None,
             concurrency_strategy: None,
+            sys_cache: Mutex::new(SystemInfoCache::new()),
         }
     }
 
@@ -561,6 +648,7 @@ impl<'a> ExecutionEngineBuilder<'a> {
             renderer: self.renderer,
             retry_strategy: self.retry_strategy,
             concurrency_strategy: self.concurrency_strategy,
+            sys_cache: self.sys_cache,
         }
     }
 }
@@ -574,14 +662,22 @@ fn build_dependency_context(
         return String::new();
     }
 
-    let mut context = String::from("=== Dependency Outputs ===\n\n");
+    use std::fmt::Write;
+
+    let estimated_size = task.dependencies.len() * 200 + 50;
+    let mut context = String::with_capacity(estimated_size);
+    context.push_str("=== Dependency Outputs ===\n\n");
 
     for dep_id in &task.dependencies {
         if let Some(result) = prev_results.get(dep_id) {
-            context.push_str(&format!("# Task: {}\n", dep_id));
-            context.push_str(&format!("Exit Code: {}\n", result.exit_code));
+            context.push_str("# Task: ");
+            context.push_str(dep_id);
+            context.push_str("\nExit Code: ");
+            let _ = writeln!(context, "{}", result.exit_code);
             if !result.output.is_empty() {
-                context.push_str(&format!("Output:\n{}\n\n", result.output));
+                context.push_str("Output:\n");
+                context.push_str(&result.output);
+                context.push_str("\n\n");
             }
         }
     }
@@ -605,7 +701,7 @@ fn build_dependency_context(
 ///
 /// Detailed execution result including per-task status
 pub async fn execute_tasks<F>(
-    tasks: Vec<StdioTask>,
+    tasks: &Vec<StdioTask>,
     ctx: &AppContext,
     opts: &ExecutionOpts,
     planner: F,
@@ -703,18 +799,13 @@ fn build_concurrency_context(
     ctx: &AppContext,
     base_concurrency: usize,
     active_tasks: usize,
+    sys_cache: &Mutex<SystemInfoCache>,
 ) -> ConcurrencyContext {
-    use sysinfo::System;
-
-    let mut sys = System::new();
-    sys.refresh_cpu();
-    sys.refresh_memory();
-
-    let cpu_count = sys.cpus().len().max(1);
-    let cpu_usage = sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / cpu_count as f32;
-
-    let total_memory = sys.total_memory().max(1);
-    let memory_usage = (sys.used_memory() as f32 / total_memory as f32) * 100.0;
+    let mut cache = match sys_cache.lock() {
+        Ok(cache) => cache,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let (cpu_count, cpu_usage, memory_usage) = cache.get();
 
     ConcurrencyContext {
         cpu_usage,
@@ -796,6 +887,7 @@ fn extract_output_from_runner_result(result: &RunnerResult) -> String {
 async fn execute_task_once<F>(
     task: StdioTask,
     ctx: &AppContext,
+    exec_opts: &ExecutionOpts,
     opts: &crate::stdio::StdioRunOpts,
     planner: F,
     services: Arc<crate::context::Services>,
@@ -823,7 +915,7 @@ where
         run_id: run_id.to_string(),
         capture_bytes: opts.capture_bytes,
         stream_format: task.stream_format.clone(),
-        project_id: task.workdir.clone(),
+        project_id: crate::util::generate_project_id_str(&task.workdir),
         events_out_tx: ctx.events_out(),
         services: services.as_ref().clone(),
         wrapper_start_data: start_data,
@@ -833,21 +925,29 @@ where
     let result_holder_clone = result_holder.clone();
     let timeout_secs = crate::stdio::effective_timeout_secs(task.timeout);
     let (abort_tx, abort_rx) = tokio::sync::mpsc::channel::<String>(1);
+    let http_sse_tx = exec_opts.http_sse_tx.clone();
 
     let run_fut = run_with_query(run_args, move |input| {
         let result_holder = result_holder_clone.clone();
+        let http_sse_tx = http_sse_tx.clone();
         async move {
             let backend_kind = input.backend_kind.to_string();
+            let parser_kind = crate::runner::ParserKind::from_stream_format(
+                &input.stream_format,
+                input.events_out_tx.clone(),
+                &input.run_id,
+            );
+            let sink_kind = crate::runner::SinkKind::from_channels(http_sse_tx, None);
             let result = run_session(RunSessionArgs {
                 session: input.session,
                 control: &input.control,
                 policy: input.policy,
                 capture_bytes: input.capture_bytes,
                 events_out: input.events_out_tx,
-                event_tx: None,
                 run_id: &input.run_id,
                 backend_kind: &backend_kind,
-                stream_format: &input.stream_format,
+                parser_kind,
+                sink_kind,
                 abort_rx: Some(abort_rx),
                 stdin_payload: input.stdin_payload.clone(),
             })

@@ -96,9 +96,6 @@ class ServerManager:
         command = [
             "memex-cli" if os.name != "nt" else "memex-cli.exe",
             "http-server",
-            "--session-id", self.session_id,
-            "--host", host,
-            "--port", str(port)
         ]
         self._debug(f"Starting server with command: {command}")
         self._debug(f"Server logs will be written to: {self.log_file}")

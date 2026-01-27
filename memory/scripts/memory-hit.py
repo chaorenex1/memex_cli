@@ -63,31 +63,11 @@ def record_hit_with_fallback(
             return True
         else:
             error = response.get("error", "Unknown error")
-            log_debug(f"HTTP server returned error: {error}, falling back to direct call")
+            log_debug(f"HTTP server returned error: {error}")
             # 继续尝试直接调用
 
     except Exception as e:
-        log_debug(f"HTTP server unavailable: {e}, falling back to direct call")
-        # 继续尝试直接调用
-
-    # 方案 B: 降级到直接调用
-    try:
-        log_debug("Using direct memex-cli call for record-hit...")
-        result = direct_cli_call("record-hit", {
-            "project-id": project_id,
-            "qa-ids": ",".join(used_qa_ids),
-            "shown": ",".join(shown_qa_ids)
-        })
-
-        if result.get("success"):
-            log_debug("✓ Hits recorded via direct call")
-            return True
-        else:
-            log_debug(f"✗ Direct call failed: {result.get('error')}")
-            return False
-
-    except Exception as e:
-        log_debug(f"Direct call error: {e}")
+        log_debug(f"HTTP server unavailable: {e}")
         return False
 
 

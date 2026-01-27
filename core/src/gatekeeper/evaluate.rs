@@ -311,6 +311,7 @@ impl Gatekeeper {
             validate_plans,
             reasons,
             signals,
+            candidate_drafts: Vec::new(),
         };
 
         tracing::debug!(
@@ -360,21 +361,17 @@ fn digest_cheap(s: &str, head_chars: usize, tail_chars: usize) -> Value {
     let head: String = s.chars().take(head_chars).collect();
 
     // Extract tail: compute byte offset directly to avoid double iteration
+    // Use cached char_indices to avoid O(n) char counting
     let tail = if tail_chars == 0 {
         String::new()
     } else {
-        // Find the byte index where the last tail_chars characters start
-        let char_count = s.chars().count();
+        // Collect char_indices once and reuse
+        let char_indices: Vec<(usize, char)> = s.char_indices().collect();
+        let char_count = char_indices.len();
         if char_count <= tail_chars {
             s.to_string()
         } else {
-            let skip_count = char_count - tail_chars;
-            // Find byte offset by iterating char_indices
-            let byte_offset = s
-                .char_indices()
-                .nth(skip_count)
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+            let byte_offset = char_indices[char_count - tail_chars].0;
             s[byte_offset..].to_string()
         }
     };

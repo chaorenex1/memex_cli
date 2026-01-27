@@ -128,6 +128,19 @@ else
     ok "$INSTALL_DIR already in PATH"
 fi
 
+# Install via npm as additional installation method
+echo ""
+info "Installing via npm (additional method)..."
+if command -v npm &>/dev/null; then
+    if npm install -g "$NAME" 2>/dev/null; then
+        ok "npm installation complete"
+    else
+        warn "npm installation failed"
+    fi
+else
+    info "npm not available, skipping..."
+fi
+
 # Verify
 echo -e "\n${G}=== Installation Complete ===${N}\n"
 echo "Run: $NAME --help"

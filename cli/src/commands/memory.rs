@@ -15,13 +15,14 @@ pub async fn handle_search(
     // Get project_id
     let project_id = args.project_id.unwrap_or_else(|| {
         std::env::current_dir()
-            .map(|p| crate::utils::project_id::generate_project_id(&p))
+            .map(|p| core_api::generate_project_id(&p))
             .unwrap_or_else(|_| "default".to_string())
     });
 
     // Build services
     let services = ctx
         .build_services(cfg)
+        .await
         .map_err(core_api::CliError::Runner)?;
 
     // Get memory plugin
@@ -87,13 +88,14 @@ pub async fn handle_record_candidate(
     // Get project_id
     let project_id = args.project_id.unwrap_or_else(|| {
         std::env::current_dir()
-            .map(|p| crate::utils::project_id::generate_project_id(&p))
+            .map(|p| core_api::generate_project_id(&p))
             .unwrap_or_else(|_| "default".to_string())
     });
 
     // Build services
     let services = ctx
         .build_services(cfg)
+        .await
         .map_err(core_api::CliError::Runner)?;
 
     // Get memory plugin
@@ -161,13 +163,14 @@ pub async fn handle_record_hit(
     // Get project_id
     let project_id = args.project_id.unwrap_or_else(|| {
         std::env::current_dir()
-            .map(|p| crate::utils::project_id::generate_project_id(&p))
+            .map(|p| core_api::generate_project_id(&p))
             .unwrap_or_else(|_| "default".to_string())
     });
 
     // Build services
     let services = ctx
         .build_services(cfg)
+        .await
         .map_err(core_api::CliError::Runner)?;
 
     // Get memory plugin
@@ -232,13 +235,14 @@ pub async fn handle_record_validation(
     // Get project_id
     let project_id = args.project_id.unwrap_or_else(|| {
         std::env::current_dir()
-            .map(|p| crate::utils::project_id::generate_project_id(&p))
+            .map(|p| core_api::generate_project_id(&p))
             .unwrap_or_else(|_| "default".to_string())
     });
 
     // Build services
     let services = ctx
         .build_services(cfg)
+        .await
         .map_err(core_api::CliError::Runner)?;
 
     // Get memory plugin
@@ -291,7 +295,7 @@ pub async fn handle_record_session(
     // Get project_id
     let project_id = args.project_id.unwrap_or_else(|| {
         std::env::current_dir()
-            .map(|p| crate::utils::project_id::generate_project_id(&p))
+            .map(|p| core_api::generate_project_id(&p))
             .unwrap_or_else(|_| "default".to_string())
     });
 
@@ -331,6 +335,7 @@ pub async fn handle_record_session(
     // Build services
     let services = ctx
         .build_services(cfg)
+        .await
         .map_err(core_api::CliError::Runner)?;
 
     // Get memory plugin

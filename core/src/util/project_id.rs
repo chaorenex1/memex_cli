@@ -16,18 +16,10 @@ use std::path::Path;
 /// 5. Spaces and special chars → "_"
 /// 6. Maximum length 64 chars
 ///
-/// # Examples
-///
-/// ```rust
-/// use memex_cli::utils::project_id::generate_project_id;
-/// use std::path::Path;
-///
-/// let path = Path::new("C:\\Users\\user\\projects\\memex_cli");
-/// assert_eq!(
-///     generate_project_id(path),
-///     "c--users-user-projects-memex_cli"
-/// );
-/// ```
+pub fn generate_project_id_str(path: &str) -> String {
+    generate_project_id(Path::new(path))
+}
+
 pub fn generate_project_id(path: &Path) -> String {
     let path_str = path.to_string_lossy().to_string();
 

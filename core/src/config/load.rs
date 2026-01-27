@@ -66,16 +66,17 @@ pub fn load_default() -> anyhow::Result<AppConfig> {
         }
     }
 
-    let MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
-
-    if let Ok(v) = std::env::var("MEM_CODECLI_MEMORY_URL") {
-        if !v.trim().is_empty() {
-            svc_cfg.base_url = v;
+    // Environment variable overrides for memory service (only for Service provider)
+    if let MemoryProvider::Service(ref mut svc_cfg) = &mut cfg.memory.provider {
+        if let Ok(v) = std::env::var("MEM_CODECLI_MEMORY_URL") {
+            if !v.trim().is_empty() {
+                svc_cfg.base_url = v;
+            }
         }
-    }
-    if let Ok(v) = std::env::var("MEM_CODECLI_MEMORY_API_KEY") {
-        if !v.trim().is_empty() {
-            svc_cfg.api_key = v;
+        if let Ok(v) = std::env::var("MEM_CODECLI_MEMORY_API_KEY") {
+            if !v.trim().is_empty() {
+                svc_cfg.api_key = v;
+            }
         }
     }
 
