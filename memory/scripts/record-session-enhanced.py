@@ -87,6 +87,7 @@ def evaluate_session_with_gatekeeper(
         )
 
         # Call the new evaluate-session endpoint
+        # log_debug(f"Request data: {json.dumps(request_data)}")
         response = client.request(
             endpoint="/api/v1/evaluate-session",
             method="POST",
@@ -94,7 +95,7 @@ def evaluate_session_with_gatekeeper(
         )
 
         if not response.get("success"):
-            log_debug(f"Evaluate-session failed: {response.get('error')}")
+            log_debug(f"Evaluate-session failed: {response}")
             return None
 
         log_debug(

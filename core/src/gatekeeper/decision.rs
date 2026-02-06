@@ -17,24 +17,42 @@ pub struct TaskGradeResult {
     pub confidence: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Search match from memory service - all fields have defaults for robust deserialization
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SearchMatch {
+    #[serde(default)]
     pub qa_id: String,
+    #[serde(default)]
     pub project_id: Option<String>,
+    #[serde(default)]
     pub question: String,
+    #[serde(default)]
     pub answer: String,
+    #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
     pub score: f32,
-    pub relevance: f32, // Similar to score?
+    #[serde(default)]
+    pub relevance: f32,
+    #[serde(default)]
     pub validation_level: i32,
+    #[serde(default)]
     pub level: Option<String>,
+    #[serde(default)]
     pub trust: f32,
+    #[serde(default)]
     pub freshness: f32,
+    #[serde(default)]
     pub confidence: f32,
+    #[serde(default)]
     pub status: String,
+    #[serde(default)]
     pub summary: Option<String>,
+    #[serde(default)]
     pub source: Option<String>,
+    #[serde(default)]
     pub expiry_at: Option<String>,
+    #[serde(default)]
     pub metadata: Value,
 }
 
